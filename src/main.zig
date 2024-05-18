@@ -8,6 +8,7 @@ const c = @cImport({
 const calendar = @import("lib/event.zig");
 const Event = calendar.Event;
 const Date = calendar.Date;
+const Time = calendar.Time;
 
 const draw = @import("lib/draw.zig");
 const Renderer = draw.Renderer;
@@ -42,9 +43,16 @@ pub fn main() !void {
     defer _ = c.SDL_DestroyRenderer(renderer);
 
     var events = std.ArrayList(Event).init(allocator);
+    try events.append(try Event.init(
+        allocator,
+        "Blocked",
+        Date.todayAt(1, 30),
+        Date.todayAt(11, 30),
+        .{ .period = calendar.one_day },
+    ));
     events = events;
 
-    const hours_surface = Surface.init(renderer, 0, 0, 64, scrn_h);
+    const hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
     const days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
     const week_surface = Surface.init(renderer, 64, 96, scrn_w - 64, scrn_h - 96);
 

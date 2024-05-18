@@ -13,9 +13,11 @@ const c = @cImport({
 });
 
 pub const Renderer = ?*c.SDL_Renderer;
+const background_color = arc.colorFromHex(0xffffffff);
 const text_color = arc.colorFromHex(0x000000ff);
 const grid_color = arc.colorFromHex(0xeeeeeeff);
 const divider_color = arc.colorFromHex(0xaaaaaaff);
+const event_color = arc.colorFromHex(0x1f8421ff);
 
 pub const Surface = struct {
     const Self = @This();
@@ -74,21 +76,49 @@ pub fn drawGrid(sf: Surface) void {
     //}
 }
 
-pub fn drawWeek(sf: Surface, events: []Event, now: Date) void {
-    _ = events;
-    _ = now;
+pub fn xFromWeekday(wday: i32, w: f32) f32 {
+    return w * @as(f32, @floatFromInt(wday)) / 7;
+}
+pub fn yFromHour(hour: f32, h: f32) f32 {
+    return h * hour / 24;
+}
 
+pub fn drawEvent(sf: Surface, event: Event) void {
+    const renderer = sf.renderer;
+    arc.setColor(renderer, event_color);
+    var h: f32 = 2;
+    if (event.end_time) |end_time| {
+        if (event.start_time) |start_time| {
+            h = end_time.hoursSinceF(start_time);
+        }
+    }
+    if (event.start_time) |start_time| {
+        _ = c.SDL_RenderFillRectF(renderer, &c.SDL_FRect{
+            .x = xFromWeekday(start_time.getWeekday(), sf.w) + 3,
+            .y = yFromHour(start_time.getHourF(), sf.h),
+            .w = sf.w / 7 - 6,
+            .h = h * sf.h / 24,
+        });
+    }
+}
+
+pub fn drawWeek(sf: Surface, events: []Event, now: Date) void {
+    _ = now;
     const renderer = sf.renderer;
     _ = c.SDL_SetRenderTarget(renderer, sf.tex);
-    _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
+    arc.setColor(renderer, background_color);
     _ = c.SDL_RenderClear(renderer);
 
     drawGrid(sf);
 
     arc.setColor(renderer, divider_color);
     for (0..7) |i| {
-        const x: f32 = sf.w * @as(f32, @floatFromInt(i)) / 7;
+        const x = xFromWeekday(@intCast(i), sf.w);
         _ = c.SDL_RenderDrawLineF(renderer, x, 0, x, sf.h);
+    }
+
+    for (events) |e| {
+        drawEvent(sf, e);
     }
     _ = c.SDL_SetRenderTarget(renderer, null);
 }
