@@ -2,6 +2,31 @@ const c = @cImport({
     @cInclude("time.h");
 });
 
+pub const TimeOffset = struct {
+    minutes: ?i32 = null,
+    hours: ?i32 = null,
+    days: ?i32 = null,
+    weeks: ?i32 = null,
+};
+
+pub const DateIter = struct {
+    const Self = @This();
+    cur: Date,
+    start: Date,
+    end: Date,
+
+    pub fn init(start: Date, end: Date) Self {
+        return .{ .cur = start, .start = start, .end = end };
+    }
+
+    pub fn nextDay(self: *Self) ?Date {
+        const last = self.cur;
+        self.cur = self.cur.after(.{ .days = 1 });
+        if (self.end.isBefore(self.cur)) return null;
+        return last;
+    }
+};
+
 pub const Date = struct {
     const Self = @This();
     tm: c.tm,
@@ -44,6 +69,28 @@ pub const Date = struct {
         const t1 = c.mktime(&tm1);
         return @floatCast(c.difftime(t0, t1) / (60 * 60));
     }
+
+    pub fn isBefore(self: Self, other: Self) bool {
+        var tm0 = self.tm;
+        var tm1 = other.tm;
+        const t0 = c.mktime(&tm0);
+        const t1 = c.mktime(&tm1);
+        return c.difftime(t0, t1) < 0;
+    }
+
+    pub fn after(self: Self, offset: TimeOffset) Self {
+        var new_tm = self.tm;
+        if (offset.minutes) |m|
+            new_tm.tm_min = new_tm.tm_min + m;
+        if (offset.hours) |h|
+            new_tm.tm_hour = new_tm.tm_hour + h;
+        if (offset.days) |d|
+            new_tm.tm_mday = new_tm.tm_mday + d;
+        if (offset.weeks) |w|
+            new_tm.tm_mday = new_tm.tm_mday + w * 7;
+        _ = c.mktime(&new_tm);
+        return .{ .tm = new_tm };
+    }
     // TODO
 };
 pub const Time = struct {
@@ -55,7 +102,8 @@ pub const Pattern = struct {
 pub const RepeatInfo = struct {
     period: Time,
     pattern: ?Pattern = null,
-    end_time: ?Date = null,
+    start: Date,
+    end: ?Date = null,
 };
 pub const Event = struct {
     const Self = @This();

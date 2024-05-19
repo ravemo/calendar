@@ -48,7 +48,7 @@ pub fn main() !void {
         "Blocked",
         Date.todayAt(1, 30),
         Date.todayAt(11, 30),
-        .{ .period = calendar.one_day },
+        .{ .start = Date.todayAt(0, 0), .period = calendar.one_day },
     ));
     events = events;
 

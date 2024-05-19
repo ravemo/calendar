@@ -2,6 +2,7 @@ const std = @import("std");
 const calendar = @import("event.zig");
 const Event = calendar.Event;
 const Date = calendar.Date;
+const DateIter = calendar.DateIter;
 const Time = calendar.Time;
 
 const text = @import("text.zig");
@@ -83,9 +84,8 @@ pub fn yFromHour(hour: f32, h: f32) f32 {
     return h * hour / 24;
 }
 
-pub fn drawEvent(sf: Surface, event: Event) void {
+pub fn drawSingleEvent(sf: Surface, event: Event, day_overwrite: ?Date) void {
     const renderer = sf.renderer;
-    arc.setColor(renderer, event_color);
     var h: f32 = 2;
     if (event.end_time) |end_time| {
         if (event.start_time) |start_time| {
@@ -93,17 +93,42 @@ pub fn drawEvent(sf: Surface, event: Event) void {
         }
     }
     if (event.start_time) |start_time| {
+        const day = if (day_overwrite) |d| d.getWeekday() else start_time.getWeekday();
+        const x = xFromWeekday(day, sf.w) + 3;
+        const y = yFromHour(start_time.getHourF(), sf.h);
+        arc.setColor(renderer, event_color);
         _ = c.SDL_RenderFillRectF(renderer, &c.SDL_FRect{
-            .x = xFromWeekday(start_time.getWeekday(), sf.w) + 3,
-            .y = yFromHour(start_time.getHourF(), sf.h),
+            .x = x,
+            .y = y,
             .w = sf.w / 7 - 6,
             .h = h * sf.h / 24,
         });
+
+        arc.setColor(renderer, text_color);
+        text.drawText(renderer, event.name, x + 2, y + 2, .Left, .Top);
     }
+}
+pub fn drawEvent(sf: Surface, event: Event, now: Date) void {
+    if (event.repeat) |repeat| {
+        var repeat_start = repeat.start;
+        // if the event starts after the week view, do nothing
+        if (now.after(.{ .weeks = 1 }).getWeekStart().isBefore(repeat_start))
+            return;
+        // If the event starts before this week view, just start on sunday
+        if (repeat_start.isBefore(now.getWeekStart()))
+            repeat_start = now.getWeekStart();
+
+        const repeat_end = if (repeat.end) |end| end else repeat_start.after(.{ .days = 8 });
+
+        var iterator = DateIter.init(repeat_start, repeat_end);
+        while (iterator.nextDay()) |i| {
+            drawSingleEvent(sf, event, i);
+        }
+    }
+    drawSingleEvent(sf, event, null);
 }
 
 pub fn drawWeek(sf: Surface, events: []Event, now: Date) void {
-    _ = now;
     const renderer = sf.renderer;
     _ = c.SDL_SetRenderTarget(renderer, sf.tex);
     arc.setColor(renderer, background_color);
@@ -118,7 +143,7 @@ pub fn drawWeek(sf: Surface, events: []Event, now: Date) void {
     }
 
     for (events) |e| {
-        drawEvent(sf, e);
+        drawEvent(sf, e, now);
     }
     _ = c.SDL_SetRenderTarget(renderer, null);
 }
