@@ -3,6 +3,7 @@ const c = @cImport({
 });
 
 pub const Time = struct {
+    seconds: ?i32 = null,
     minutes: ?i32 = null,
     hours: ?i32 = null,
     days: ?i32 = null,
@@ -18,7 +19,51 @@ pub const Time = struct {
             hours += @floatFromInt(h);
         if (self.minutes) |m|
             hours += @as(f32, @floatFromInt(m)) / 60;
+        if (self.seconds) |s|
+            hours += @as(f32, @floatFromInt(s)) / (60 * 60);
         return hours;
+    }
+
+    pub fn getSeconds(self: Time) i32 {
+        var seconds: i32 = 0;
+        if (self.weeks) |w|
+            seconds += w * 60 * 60 * 24 * 7;
+        if (self.days) |d|
+            seconds += d * 60 * 60 * 24;
+        if (self.hours) |h|
+            seconds += h * 60 * 60;
+        if (self.minutes) |m|
+            seconds += m * 60;
+        if (self.seconds) |s|
+            seconds += s;
+        return seconds;
+    }
+
+    pub fn toReadable(self: Time) Time {
+        var t = Time{ .seconds = self.getSeconds() };
+        if (@abs(t.seconds.?) >= 7 * 24 * 60 * 60) {
+            t.weeks = @divFloor(t.seconds.?, 7 * 24 * 60 * 60);
+            t.seconds.? -= t.weeks.? * 7 * 24 * 60 * 60;
+        }
+        if (@abs(t.seconds.?) >= 24 * 60 * 60) {
+            t.days = @divFloor(t.seconds.?, 24 * 60 * 60);
+            t.seconds.? -= t.days.? * 24 * 60 * 60;
+        }
+        if (@abs(t.seconds.?) >= 60 * 60) {
+            t.hours = @divFloor(t.seconds.?, 60 * 60);
+            t.seconds.? -= t.hours.? * 60 * 60;
+        }
+        if (@abs(t.seconds.?) >= 60) {
+            t.minutes = @divFloor(t.seconds.?, 60);
+            t.seconds.? -= t.minutes.? * 60;
+        }
+        return t;
+    }
+
+    pub fn add(self: Time, other: Time) Time {
+        const self_seconds = self.getSeconds();
+        const other_seconds = other.getSeconds();
+        return (Time{ .seconds = self_seconds + other_seconds }).toReadable();
     }
 };
 
@@ -111,6 +156,14 @@ pub const Date = struct {
     pub fn getWeekday(self: Self) i32 {
         return self.tm.tm_wday;
     }
+    pub fn getDayStart(self: Self) Date {
+        var new_tm = self.tm;
+        new_tm.tm_hour = 0;
+        new_tm.tm_min = 0;
+        new_tm.tm_sec = 0;
+        _ = c.mktime(&new_tm);
+        return .{ .tm = new_tm };
+    }
     pub fn getHourF(self: Self) f32 {
         return @as(f32, @floatFromInt(self.tm.tm_hour)) +
             @as(f32, @floatFromInt(self.tm.tm_min)) / 60;
@@ -121,6 +174,13 @@ pub const Date = struct {
         const t0 = c.mktime(&tm0);
         const t1 = c.mktime(&tm1);
         return @floatCast(c.difftime(t0, t1) / (60 * 60));
+    }
+    pub fn secondsSince(self: Self, other: Self) i32 {
+        var tm0 = self.tm;
+        var tm1 = other.tm;
+        const t0 = c.mktime(&tm0);
+        const t1 = c.mktime(&tm1);
+        return @intFromFloat(c.difftime(t0, t1));
     }
 
     pub fn isBefore(self: Self, other: Self) bool {
@@ -133,6 +193,8 @@ pub const Date = struct {
 
     pub fn after(self: Self, offset: Time) Self {
         var new_tm = self.tm;
+        if (offset.seconds) |s|
+            new_tm.tm_min = new_tm.tm_sec + s;
         if (offset.minutes) |m|
             new_tm.tm_min = new_tm.tm_min + m;
         if (offset.hours) |h|

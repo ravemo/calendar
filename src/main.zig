@@ -63,9 +63,9 @@ pub fn main() !void {
     ));
     try events.append(try Event.init(
         allocator,
-        "Sleep and lunch",
-        Date.todayAt(1, 30),
-        .{ .time = .{ .hours = 10, .minutes = 30 } },
+        "Sleep",
+        Date.todayAt(22, 30),
+        .{ .time = .{ .hours = 8 } },
         .{ .start = Date.last(.Sunday), .period = .{ .time = .{ .weeks = 1 } } },
     ));
     //{.mon = true, .tue = true, .wed = true, .thu = true, .fri = true}

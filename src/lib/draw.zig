@@ -63,16 +63,10 @@ pub const Surface = struct {
 
 pub fn drawGrid(sf: Surface) void {
     const renderer = sf.renderer;
-    const grid_size: f32 = 32;
-    const grid_count_w: usize = @intFromFloat(@ceil(sf.w / grid_size));
-    const grid_count_h: usize = @intFromFloat(@ceil(sf.h / grid_size));
+    const grid_count_h: usize = @intFromFloat(@ceil(sf.h / 12));
     arc.setColor(renderer, grid_color);
-    for (0..grid_count_w) |i| {
-        const x: f32 = @as(f32, @floatFromInt(i)) * grid_size;
-        _ = c.SDL_RenderDrawLineF(renderer, x, 0, x, sf.h);
-    }
     for (0..grid_count_h) |i| {
-        const y: f32 = @as(f32, @floatFromInt(i)) * grid_size;
+        const y: f32 = @as(f32, @floatFromInt(i)) * sf.h / 48;
         _ = c.SDL_RenderDrawLineF(renderer, 0, y, sf.w, y);
     }
 }
@@ -86,10 +80,29 @@ pub fn yFromHour(hour: f32, h: f32) f32 {
 
 pub fn drawSingleEvent(sf: Surface, event: Event) void {
     const renderer = sf.renderer;
+    // if the event crosses the day boundary, but does not end at midnight
+    if (event.start.getDayStart().isBefore(event.getEnd().getDayStart()) and
+        event.getEnd().getDayStart().secondsSince(event.getEnd()) != 0)
+    {
+        const split = event.start.after(.{ .days = 1 }).getDayStart();
+        var head = event;
+        head.end = .{ .date = split };
+        drawSingleEvent(sf, head);
+
+        var tail = event;
+        tail.start = split;
+        switch (tail.end) {
+            .time => |*t| t.* = t.add(.{ .seconds = -head.getEnd().secondsSince(head.start) }),
+            else => {},
+        }
+        drawSingleEvent(sf, tail);
+        return;
+    }
     const h = switch (event.end) {
         .time => |t| t.getHoursF(),
         .date => |d| d.hoursSinceF(event.start),
     };
+
     const x = xFromWeekday(event.start.getWeekday(), sf.w) + 3;
     const y = yFromHour(event.start.getHourF(), sf.h);
     arc.setColor(renderer, event_color);
