@@ -47,17 +47,26 @@ pub fn main() !void {
     var events = std.ArrayList(Event).init(allocator);
     try events.append(try Event.init(
         allocator,
-        "Lunch",
-        Date.atDate(20, 5, 2024),
-        .{ .time = .{ .hours = 2 } },
-        .{ .start = Date.last(.Monday), .period = .{ .weeks = 1 } },
+        "Dinner",
+        Date.todayAt(16, 40),
+        .{ .time = .{ .hours = 1, .minutes = 50 } },
+        .{ .start = Date.last(.Monday), .period = .{
+            .pattern = .{
+                .mon = true,
+                .tue = true,
+                .wed = true,
+                .thu = true,
+                .fri = true,
+                .sat = true,
+            },
+        } },
     ));
     try events.append(try Event.init(
         allocator,
         "Sleep and lunch",
         Date.todayAt(1, 30),
         .{ .time = .{ .hours = 10, .minutes = 30 } },
-        .{ .start = Date.last(.Sunday), .period = .{ .weeks = 1 } },
+        .{ .start = Date.last(.Sunday), .period = .{ .time = .{ .weeks = 1 } } },
     ));
     //{.mon = true, .tue = true, .wed = true, .thu = true, .fri = true}
     events = events;

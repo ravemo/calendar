@@ -150,18 +150,32 @@ pub const Date = struct {
         self.tm.tm_mon = date.tm.tm_mon;
         self.tm.tm_year = date.tm.tm_year;
     }
+
+    pub fn setWeekday(self: *Self, wday: Weekday) void {
+        self.tm.tm_wday = @intFromEnum(wday);
+    }
     // TODO
 };
 pub const Deadline = union(enum) {
     date: Date,
     time: Time,
 };
+
 pub const Pattern = struct {
-    // TODO
+    sun: bool = false,
+    mon: bool = false,
+    tue: bool = false,
+    wed: bool = false,
+    thu: bool = false,
+    fri: bool = false,
+    sat: bool = false,
+};
+pub const Period = union(enum) {
+    time: Time,
+    pattern: Pattern,
 };
 pub const RepeatInfo = struct {
-    period: Time,
-    pattern: ?Pattern = null,
+    period: Period,
     start: Date,
     end: ?Date = null,
 };
@@ -186,6 +200,11 @@ pub const Event = struct {
     pub fn atDay(self: Self, day: Date) Self {
         var new = self;
         new.start.setDate(day);
+        return new;
+    }
+    pub fn atWeekday(self: Self, wday: Weekday) Self {
+        var new = self;
+        new.start.setWeekday(wday);
         return new;
     }
 

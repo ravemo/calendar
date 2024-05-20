@@ -3,6 +3,7 @@ const calendar = @import("event.zig");
 const Event = calendar.Event;
 const Date = calendar.Date;
 const DateIter = calendar.DateIter;
+const Weekday = calendar.Weekday;
 const Time = calendar.Time;
 
 const text = @import("text.zig");
@@ -117,15 +118,29 @@ pub fn drawEvent(sf: Surface, event: Event, now: Date) void {
 
         const repeat_end = if (repeat.end) |end| end else repeat_start.after(.{ .days = 8 });
 
-        var iterator = DateIter.init(repeat_start, repeat_end);
-        while (iterator.next(repeat.period)) |i| {
-            const e = event.atDay(i);
-            if (e.getEnd().isBefore(view_start)) continue;
-            if (view_end.isBefore(e.start)) continue;
-            drawSingleEvent(sf, event);
+        switch (repeat.period) {
+            .time => |t| {
+                var iterator = DateIter.init(repeat_start, repeat_end);
+                while (iterator.next(t)) |i| {
+                    const e = event.atDay(i);
+                    if (e.getEnd().isBefore(view_start)) continue;
+                    if (view_end.isBefore(e.start)) continue;
+                    drawSingleEvent(sf, e);
+                }
+            },
+            .pattern => |p| {
+                if (p.sun) drawSingleEvent(sf, event.atWeekday(.Sunday));
+                if (p.mon) drawSingleEvent(sf, event.atWeekday(.Monday));
+                if (p.tue) drawSingleEvent(sf, event.atWeekday(.Tuesday));
+                if (p.wed) drawSingleEvent(sf, event.atWeekday(.Wednesday));
+                if (p.thu) drawSingleEvent(sf, event.atWeekday(.Thursday));
+                if (p.fri) drawSingleEvent(sf, event.atWeekday(.Friday));
+                if (p.sat) drawSingleEvent(sf, event.atWeekday(.Saturday));
+            },
         }
+    } else {
+        drawSingleEvent(sf, event);
     }
-    drawSingleEvent(sf, event);
 }
 
 pub fn drawWeek(sf: Surface, events: []Event, now: Date) void {
