@@ -21,7 +21,7 @@ pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
     // SDL-related stuff
-    if (c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS | c.SDL_INIT_AUDIO) < 0)
+    if (c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS) < 0)
         sdlPanic();
 
     defer c.SDL_Quit();
@@ -42,14 +42,24 @@ pub fn main() !void {
     const renderer = c.SDL_CreateRenderer(window, -1, c.SDL_RENDERER_ACCELERATED | c.SDL_RENDERER_PRESENTVSYNC) orelse sdlPanic();
     defer _ = c.SDL_DestroyRenderer(renderer);
 
+    _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
+
     var events = std.ArrayList(Event).init(allocator);
     try events.append(try Event.init(
         allocator,
-        "Blocked",
-        Date.todayAt(1, 30),
-        Date.todayAt(11, 30),
-        .{ .start = Date.todayAt(0, 0), .period = calendar.one_day },
+        "Lunch",
+        Date.atDate(20, 5, 2024),
+        .{ .time = .{ .hours = 2 } },
+        .{ .start = Date.last(.Monday), .period = .{ .weeks = 1 } },
     ));
+    try events.append(try Event.init(
+        allocator,
+        "Sleep and lunch",
+        Date.todayAt(1, 30),
+        .{ .time = .{ .hours = 10, .minutes = 30 } },
+        .{ .start = Date.last(.Sunday), .period = .{ .weeks = 1 } },
+    ));
+    //{.mon = true, .tue = true, .wed = true, .thu = true, .fri = true}
     events = events;
 
     const hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);

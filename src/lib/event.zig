@@ -2,11 +2,24 @@ const c = @cImport({
     @cInclude("time.h");
 });
 
-pub const TimeOffset = struct {
+pub const Time = struct {
     minutes: ?i32 = null,
     hours: ?i32 = null,
     days: ?i32 = null,
     weeks: ?i32 = null,
+
+    pub fn getHoursF(self: Time) f32 {
+        var hours: f32 = 0;
+        if (self.weeks) |w|
+            hours += @floatFromInt(w * 7 * 24);
+        if (self.days) |d|
+            hours += @floatFromInt(d * 24);
+        if (self.hours) |h|
+            hours += @floatFromInt(h);
+        if (self.minutes) |m|
+            hours += @as(f32, @floatFromInt(m)) / 60;
+        return hours;
+    }
 };
 
 pub const DateIter = struct {
@@ -19,12 +32,22 @@ pub const DateIter = struct {
         return .{ .cur = start, .start = start, .end = end };
     }
 
-    pub fn nextDay(self: *Self) ?Date {
+    pub fn next(self: *Self, step: Time) ?Date {
         const last = self.cur;
-        self.cur = self.cur.after(.{ .days = 1 });
+        self.cur = self.cur.after(step);
         if (self.end.isBefore(self.cur)) return null;
         return last;
     }
+};
+
+pub const Weekday = enum(i32) {
+    Sunday = 0,
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
 };
 
 pub const Date = struct {
@@ -38,6 +61,19 @@ pub const Date = struct {
         return .{ .tm = tm };
     }
 
+    pub fn last(weekday: Weekday) Date {
+        const t: c.time_t = c.time(null);
+        var tm: c.tm = undefined;
+        _ = c.localtime_r(&t, &tm);
+        var new_tm = tm;
+        if (tm.tm_wday >= @intFromEnum(weekday)) {
+            new_tm.tm_mday -= tm.tm_wday - @intFromEnum(weekday);
+        } else {
+            new_tm.tm_mday -= tm.tm_wday - @intFromEnum(weekday) + 7;
+        }
+        _ = c.mktime(&new_tm);
+        return .{ .tm = new_tm };
+    }
     pub fn todayAt(hours: i32, minutes: i32) Date {
         const t: c.time_t = c.time(null);
         var tm: c.tm = undefined;
@@ -48,9 +84,26 @@ pub const Date = struct {
         return .{ .tm = tm };
     }
 
+    pub fn atDate(day: i32, month: i32, year: i32) Date {
+        const t: c.time_t = c.time(null);
+        var tm: c.tm = undefined;
+        _ = c.localtime_r(&t, &tm);
+        tm.tm_mday = day;
+        tm.tm_mon = month - 1;
+        tm.tm_year = year - 1900;
+        tm.tm_hour = 0;
+        tm.tm_min = 0;
+        tm.tm_sec = 0;
+        _ = c.mktime(&tm);
+        return .{ .tm = tm };
+    }
+
     pub fn getWeekStart(self: Self) Date {
         var new_tm = self.tm;
         new_tm.tm_mday = new_tm.tm_mday - new_tm.tm_wday;
+        new_tm.tm_hour = 0;
+        new_tm.tm_min = 0;
+        new_tm.tm_sec = 0;
         _ = c.mktime(&new_tm);
         return .{ .tm = new_tm };
     }
@@ -78,7 +131,7 @@ pub const Date = struct {
         return c.difftime(t0, t1) < 0;
     }
 
-    pub fn after(self: Self, offset: TimeOffset) Self {
+    pub fn after(self: Self, offset: Time) Self {
         var new_tm = self.tm;
         if (offset.minutes) |m|
             new_tm.tm_min = new_tm.tm_min + m;
@@ -91,10 +144,17 @@ pub const Date = struct {
         _ = c.mktime(&new_tm);
         return .{ .tm = new_tm };
     }
+
+    pub fn setDate(self: *Self, date: Date) void {
+        self.tm.tm_mday = date.tm.tm_mday;
+        self.tm.tm_mon = date.tm.tm_mon;
+        self.tm.tm_year = date.tm.tm_year;
+    }
     // TODO
 };
-pub const Time = struct {
-    // TODO
+pub const Deadline = union(enum) {
+    date: Date,
+    time: Time,
 };
 pub const Pattern = struct {
     // TODO
@@ -107,20 +167,32 @@ pub const RepeatInfo = struct {
 };
 pub const Event = struct {
     const Self = @This();
-    name: []u8,
-    start_time: ?Date,
-    end_time: ?Date, // TODO Create enum class for this. The end time can be
+    name: []const u8,
+    start: Date,
+    end: Deadline,
     // either nothing, a date or the start_time offset by some duration.
     repeat: ?RepeatInfo,
 
-    pub fn init(allocator: anytype, name: []const u8, start_time: ?Date, end_time: ?Date, repeat: ?RepeatInfo) !Self {
+    pub fn init(allocator: anytype, name: []const u8, start: Date, end: Deadline, repeat: ?RepeatInfo) !Self {
+        _ = allocator;
         return .{
-            .name = try allocator.dupe(u8, name),
-            .start_time = start_time,
-            .end_time = end_time,
+            .name = name,
+            .start = start,
+            .end = end,
             .repeat = repeat,
         };
     }
-};
 
-pub const one_day: Time = .{};
+    pub fn atDay(self: Self, day: Date) Self {
+        var new = self;
+        new.start.setDate(day);
+        return new;
+    }
+
+    pub fn getEnd(self: Self) Date {
+        return switch (self.end) {
+            .time => |t| self.start.after(t),
+            .date => |e| e,
+        };
+    }
+};

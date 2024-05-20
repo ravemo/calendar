@@ -18,7 +18,7 @@ const background_color = arc.colorFromHex(0xffffffff);
 const text_color = arc.colorFromHex(0x000000ff);
 const grid_color = arc.colorFromHex(0xeeeeeeff);
 const divider_color = arc.colorFromHex(0xaaaaaaff);
-const event_color = arc.colorFromHex(0x1f8421ff);
+const event_color = arc.colorFromHex(0x1f842188);
 
 pub const Surface = struct {
     const Self = @This();
@@ -61,20 +61,19 @@ pub const Surface = struct {
 };
 
 pub fn drawGrid(sf: Surface) void {
-    _ = sf;
-    //const renderer = sf.renderer;
-    //const grid_size: f32 = 32;
-    //const grid_count_w: usize = @intFromFloat(@ceil(sf.w / grid_size));
-    //const grid_count_h: usize = @intFromFloat(@ceil(sf.h / grid_size));
-    //arc.setColor(renderer, grid_color);
-    //for (0..grid_count_w) |i| {
-    //    const x: f32 = @as(f32, @floatFromInt(i)) * grid_size;
-    //    _ = c.SDL_RenderDrawLineF(renderer, x, 0, x, sf.h);
-    //}
-    //for (0..grid_count_h) |i| {
-    //    const y: f32 = @as(f32, @floatFromInt(i)) * grid_size;
-    //    _ = c.SDL_RenderDrawLineF(renderer, 0, y, sf.w, y);
-    //}
+    const renderer = sf.renderer;
+    const grid_size: f32 = 32;
+    const grid_count_w: usize = @intFromFloat(@ceil(sf.w / grid_size));
+    const grid_count_h: usize = @intFromFloat(@ceil(sf.h / grid_size));
+    arc.setColor(renderer, grid_color);
+    for (0..grid_count_w) |i| {
+        const x: f32 = @as(f32, @floatFromInt(i)) * grid_size;
+        _ = c.SDL_RenderDrawLineF(renderer, x, 0, x, sf.h);
+    }
+    for (0..grid_count_h) |i| {
+        const y: f32 = @as(f32, @floatFromInt(i)) * grid_size;
+        _ = c.SDL_RenderDrawLineF(renderer, 0, y, sf.w, y);
+    }
 }
 
 pub fn xFromWeekday(wday: i32, w: f32) f32 {
@@ -84,31 +83,29 @@ pub fn yFromHour(hour: f32, h: f32) f32 {
     return h * hour / 24;
 }
 
-pub fn drawSingleEvent(sf: Surface, event: Event, day_overwrite: ?Date) void {
+pub fn drawSingleEvent(sf: Surface, event: Event) void {
     const renderer = sf.renderer;
-    var h: f32 = 2;
-    if (event.end_time) |end_time| {
-        if (event.start_time) |start_time| {
-            h = end_time.hoursSinceF(start_time);
-        }
-    }
-    if (event.start_time) |start_time| {
-        const day = if (day_overwrite) |d| d.getWeekday() else start_time.getWeekday();
-        const x = xFromWeekday(day, sf.w) + 3;
-        const y = yFromHour(start_time.getHourF(), sf.h);
-        arc.setColor(renderer, event_color);
-        _ = c.SDL_RenderFillRectF(renderer, &c.SDL_FRect{
-            .x = x,
-            .y = y,
-            .w = sf.w / 7 - 6,
-            .h = h * sf.h / 24,
-        });
+    const h = switch (event.end) {
+        .time => |t| t.getHoursF(),
+        .date => |d| d.hoursSinceF(event.start),
+    };
+    const x = xFromWeekday(event.start.getWeekday(), sf.w) + 3;
+    const y = yFromHour(event.start.getHourF(), sf.h);
+    arc.setColor(renderer, event_color);
+    _ = c.SDL_RenderFillRectF(renderer, &c.SDL_FRect{
+        .x = x,
+        .y = y,
+        .w = sf.w / 7 - 6,
+        .h = h * sf.h / 24,
+    });
 
-        arc.setColor(renderer, text_color);
-        text.drawText(renderer, event.name, x + 2, y + 2, .Left, .Top);
-    }
+    arc.setColor(renderer, text_color);
+    text.drawText(renderer, event.name, x + 2, y + 2, .Left, .Top);
 }
 pub fn drawEvent(sf: Surface, event: Event, now: Date) void {
+    const view_start = Date.now().getWeekStart();
+    const view_end = Date.now().getWeekStart().after(.{ .weeks = 1 });
+
     if (event.repeat) |repeat| {
         var repeat_start = repeat.start;
         // if the event starts after the week view, do nothing
@@ -121,11 +118,14 @@ pub fn drawEvent(sf: Surface, event: Event, now: Date) void {
         const repeat_end = if (repeat.end) |end| end else repeat_start.after(.{ .days = 8 });
 
         var iterator = DateIter.init(repeat_start, repeat_end);
-        while (iterator.nextDay()) |i| {
-            drawSingleEvent(sf, event, i);
+        while (iterator.next(repeat.period)) |i| {
+            const e = event.atDay(i);
+            if (e.getEnd().isBefore(view_start)) continue;
+            if (view_end.isBefore(e.start)) continue;
+            drawSingleEvent(sf, event);
         }
     }
-    drawSingleEvent(sf, event, null);
+    drawSingleEvent(sf, event);
 }
 
 pub fn drawWeek(sf: Surface, events: []Event, now: Date) void {
