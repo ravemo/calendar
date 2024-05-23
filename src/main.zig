@@ -68,8 +68,6 @@ pub fn main() !void {
         .{ .time = .{ .hours = 8 } },
         .{ .start = Date.last(.Sunday), .period = .{ .time = .{ .weeks = 1 } } },
     ));
-    //{.mon = true, .tue = true, .wed = true, .thu = true, .fri = true}
-    events = events;
 
     const hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
     const days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);

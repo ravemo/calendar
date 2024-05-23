@@ -1,5 +1,5 @@
 const std = @import("std");
-const regexImport = @import("regex");
+const regexImport = @import("../lib/regex.zig");
 const Regex = regexImport.Regex;
 const Captures = regexImport.Captures;
 const Linenoise = @import("linenoise").Linenoise;
@@ -13,9 +13,14 @@ const AddCmd = struct {
     const Self = @This();
     const pattern = "add (.*)";
     name: []const u8,
+    allocator: std.mem.Allocator,
 
-    fn init(cap: Captures) !Self {
-        return .{ .name = cap.sliceAt(1).? };
+    fn init(cap: *Captures, allocator: std.mem.Allocator) !Self {
+        return .{ .name = try allocator.dupe(u8, cap.sliceAt(1).?), .allocator = allocator };
+    }
+
+    pub fn deinit(self: Self) void {
+        self.allocator.free(self.name);
     }
 
     pub fn execute(self: Self, allocator: std.mem.Allocator, db: Database, ln: *Linenoise) !void {
@@ -46,13 +51,14 @@ const RmCmd = struct {
     const Self = @This();
     const pattern = "rm (.*)";
     id: i32,
-    fn init(cap: Captures) !Self {
+    fn init(cap: *Captures, _: std.mem.Allocator) !Self {
         const id = std.fmt.parseInt(i32, cap.sliceAt(1).?, 10) catch |e| {
             std.debug.print("Couldn't parse \"{s}\"\n", .{cap.sliceAt(1).?});
             return e;
         };
         return .{ .id = id };
     }
+    pub fn deinit(_: Self) void {}
 
     pub fn execute(self: Self, allocator: std.mem.Allocator, db: Database) !void {
         const query = try std.fmt.allocPrintZ(
@@ -67,9 +73,10 @@ const RmCmd = struct {
 const ViewCmd = struct {
     const Self = @This();
     const pattern = "list";
-    fn init(_: Captures) !Self {
+    fn init(_: *Captures, _: std.mem.Allocator) !Self {
         return .{};
     }
+    pub fn deinit(_: Self) void {}
     fn callback(_: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*c]u8) callconv(.C) c_int {
         for (0..@intCast(argc)) |i| {
             if (argv[i] == null) {
@@ -95,9 +102,10 @@ const ViewCmd = struct {
 const QuitCmd = struct {
     const Self = @This();
     const pattern = "quit";
-    fn init(_: Captures) !Self {
+    fn init(_: *Captures, _: std.mem.Allocator) !Self {
         return .{};
     }
+    pub fn deinit(_: Self) void {}
 };
 const Cmd = union(enum) {
     add: AddCmd,
@@ -106,13 +114,17 @@ const Cmd = union(enum) {
     quit: QuitCmd,
 };
 
-pub fn getCmd(allocator: std.mem.Allocator, str: []const u8) !Cmd {
+pub fn getCmd(allocator: std.mem.Allocator, str: [:0]const u8) !Cmd {
     inline for (std.meta.fields(Cmd)) |field| {
         const T = field.type;
-        var regex = try Regex.compile(allocator, T.pattern);
+        var regex = try Regex.compile(T.pattern);
         defer regex.deinit();
-        if (try regex.captures(str)) |cap|
-            return @unionInit(Cmd, field.name, try T.init(cap));
+        var cap_opt = regex.captures(str) catch |e| switch (e) {
+            error.NoMatches => null,
+            else => return e,
+        };
+        if (cap_opt) |*cap|
+            return @unionInit(Cmd, field.name, try T.init(cap, allocator));
     }
     return error.NoMatch;
 }

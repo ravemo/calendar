@@ -9,10 +9,16 @@ pub const Captures = struct {
     str: [:0]const u8,
     matchCount: usize,
     ovector: [30]c_int,
-    pub fn sliceAt(self: Self, i: usize) !?[]const u8 {
-        _ = self;
-        _ = i;
-        return error.TODO;
+    pub fn sliceAt(self: *Self, i: usize) ?[]const u8 {
+        var substring: [*c]const u8 = null;
+        _ = c.pcre_get_substring(
+            self.str,
+            @ptrCast(&self.ovector),
+            @intCast(self.matchCount),
+            @intCast(i),
+            &substring,
+        );
+        return std.mem.span(substring);
     }
     pub fn getNamedMatch(self: *Self, name: [:0]const u8) !?[:0]const u8 {
         var substring: [*c]const u8 = null;
@@ -24,11 +30,13 @@ pub const Captures = struct {
             name,
             &substring,
         );
-        return std.mem.span(substring);
+        return if (substring) |substr| std.mem.span(substr) else null;
     }
 
-    pub fn deinitMatch(_: Self, match: [:0]const u8) void {
-        c.pcre_free_substring(match);
+    pub fn deinitMatch(_: Self, match: ?[:0]const u8) void {
+        if (match) |m| {
+            c.pcre_free_substring(m);
+        }
     }
 };
 

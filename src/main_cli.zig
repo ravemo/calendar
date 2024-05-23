@@ -28,7 +28,7 @@ pub fn main() !void {
     const allocator = std.heap.page_allocator;
     var ln = Linenoise.init(allocator);
     defer ln.deinit();
-    while (try ln.linenoise("> ")) |input| {
+    while (try ln.linenoiseZ("> ")) |input| {
         defer allocator.free(input);
 
         const cmd_general = try commands.getCmd(allocator, input);

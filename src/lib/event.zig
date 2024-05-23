@@ -112,14 +112,6 @@ pub const Weekday = enum(i32) {
     Saturday,
 };
 
-const DatePart = enum {
-    Year,
-    Month,
-    Day,
-    Hours,
-    Minutes,
-};
-
 pub const Date = struct {
     const Self = @This();
     tm: c.tm,
@@ -188,6 +180,13 @@ pub const Date = struct {
 
         var cap = try re.captures(str);
 
+        const DatePart = enum {
+            Year,
+            Month,
+            Day,
+            Hours,
+            Minutes,
+        };
         const parts = [_]struct { str: [:0]const u8, val: DatePart }{
             .{ .str = "year", .val = .Year },
             .{ .str = "month", .val = .Month },
