@@ -30,7 +30,7 @@ pub fn main() !void {
     defer c.TTF_Quit();
 
     const window = c.SDL_CreateWindow(
-        "Template",
+        "Calendar",
         c.SDL_WINDOWPOS_CENTERED,
         c.SDL_WINDOWPOS_CENTERED,
         scrn_w,

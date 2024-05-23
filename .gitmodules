@@ -1,0 +1,6 @@
+[submodule "lib/zig-regex"]
+	path = lib/zig-regex
+	url = https://github.com/tiehuis/zig-regex
+[submodule "lib/linenoize"]
+	path = lib/linenoize
+	url = https://github.com/joachimschmidt557/linenoize

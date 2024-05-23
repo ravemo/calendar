@@ -1,6 +1,10 @@
+const std = @import("std");
 const c = @cImport({
     @cInclude("time.h");
+    @cInclude("pcre.h");
 });
+
+const print = std.debug.print;
 
 pub const Time = struct {
     seconds: ?i32 = null,
@@ -95,9 +99,27 @@ pub const Weekday = enum(i32) {
     Saturday,
 };
 
+const DatePart = enum {
+    Year,
+    Month,
+    Day,
+    Hours,
+    Minutes,
+};
+
 pub const Date = struct {
     const Self = @This();
     tm: c.tm,
+
+    pub fn default() Date {
+        const t: c.time_t = c.time(null);
+        var tm: c.tm = undefined;
+        _ = c.localtime_r(&t, &tm);
+        tm.tm_hour = 0;
+        tm.tm_min = 0;
+        tm.tm_sec = 0;
+        return .{ .tm = tm };
+    }
 
     pub fn now() Date {
         const t: c.time_t = c.time(null);
@@ -141,6 +163,67 @@ pub const Date = struct {
         tm.tm_sec = 0;
         _ = c.mktime(&tm);
         return .{ .tm = tm };
+    }
+
+    pub fn fromString(str: [:0]const u8) !Date {
+        const pattern_ymd = "^(?:(?'year'\\d{4})(?:-(?'month'\\d{2})(?:-(?'day'\\d{2}))?)?)?(?: ?(?'hours'\\d{2}):?(?'minutes'\\d{2}))?$";
+        const pattern_md = "^(?:(\\d{2})-(\\d{2}))(?: (\\d{2}):?(\\d{2}))?$";
+        _ = pattern_md; // TODO
+
+        var err: [*c]u8 = undefined;
+        var erroffset: c_int = undefined;
+        var ovector: [30]c_int = undefined;
+
+        const re = c.pcre_compile(pattern_ymd, 0, (&err), &erroffset, null).?;
+        defer c.pcre_free.?(re);
+
+        const rc = c.pcre_exec(re, null, str, @intCast(str.len), 0, 0, &ovector, 30);
+
+        if (rc == c.PCRE_ERROR_NOMATCH) {
+            print("no match\n", .{});
+            return error.NoMatch;
+        } else if (rc < -1) {
+            print("error {d} from regex\n", .{rc});
+            return error.RegexError;
+        } else {
+            const parts = [_]struct { str: [:0]const u8, val: DatePart }{
+                .{ .str = "year", .val = .Year },
+                .{ .str = "month", .val = .Month },
+                .{ .str = "day", .val = .Day },
+                .{ .str = "hours", .val = .Hours },
+                .{ .str = "minutes", .val = .Minutes },
+            };
+            var date = Date.default();
+            // loop through matches and return them
+            for (parts) |part| {
+                const name = part.str;
+                const v = part.val;
+                var substring: [*c]const u8 = null;
+                _ = c.pcre_get_named_substring(re, str, @ptrCast(&ovector), rc, name, &substring);
+                if (substring != null) {
+                    print("{s}: {s}\n", .{ name, substring });
+                    switch (v) {
+                        .Year => date.setYear(try std.fmt.parseInt(i32, std.mem.span(substring), 10)),
+                        .Month => date.setMonth(try std.fmt.parseInt(i32, std.mem.span(substring), 10)),
+                        .Day => date.setDay(try std.fmt.parseInt(i32, std.mem.span(substring), 10)),
+                        .Hours => date.setHours(try std.fmt.parseInt(i32, std.mem.span(substring), 10)),
+                        .Minutes => date.setMinutes(try std.fmt.parseInt(i32, std.mem.span(substring), 10)),
+                    }
+                    c.pcre_free_substring(substring);
+                }
+            }
+            return date;
+        }
+    }
+
+    pub fn toString(self: Self, allocator: std.mem.Allocator) ![]const u8 {
+        return std.fmt.allocPrint(allocator, "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}", .{
+            @as(u32, @intCast(self.tm.tm_year + 1900)),
+            @as(u32, @intCast(self.tm.tm_mon + 1)),
+            @as(u32, @intCast(self.tm.tm_mday + 1)),
+            @as(u32, @intCast(self.tm.tm_hour)),
+            @as(u32, @intCast(self.tm.tm_min)),
+        });
     }
 
     pub fn getWeekStart(self: Self) Date {
@@ -213,9 +296,25 @@ pub const Date = struct {
         self.tm.tm_year = date.tm.tm_year;
     }
 
+    pub fn setYear(self: *Self, year: i32) void {
+        self.tm.tm_year = year - 1900;
+    }
+    pub fn setMonth(self: *Self, month: i32) void {
+        self.tm.tm_mon = month;
+    }
+    pub fn setDay(self: *Self, mday: i32) void {
+        self.tm.tm_mday = mday;
+    }
     pub fn setWeekday(self: *Self, wday: Weekday) void {
         self.tm.tm_wday = @intFromEnum(wday);
     }
+    pub fn setHours(self: *Self, hour: i32) void {
+        self.tm.tm_hour = hour;
+    }
+    pub fn setMinutes(self: *Self, minute: i32) void {
+        self.tm.tm_min = minute;
+    }
+
     // TODO
 };
 pub const Deadline = union(enum) {
