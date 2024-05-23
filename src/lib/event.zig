@@ -7,13 +7,24 @@ const c = @cImport({
 const print = std.debug.print;
 
 pub const Time = struct {
+    const Self = @This();
     seconds: ?i32 = null,
     minutes: ?i32 = null,
     hours: ?i32 = null,
     days: ?i32 = null,
     weeks: ?i32 = null,
 
-    pub fn getHoursF(self: Time) f32 {
+    pub fn toString(self: Self, allocator: std.mem.Allocator) ![]const u8 {
+        return std.fmt.allocPrint(allocator, "{?} weeks, {?} days, {?} hours, {?} minutes, {?} seconds", .{
+            @as(i32, @intFromBool(self.weeks)),
+            @as(i32, @intFromBool(self.days)),
+            @as(i32, @intFromBool(self.hours)),
+            @as(i32, @intFromBool(self.minutes)),
+            @as(i32, @intFromBool(self.seconds)),
+        });
+    }
+
+    pub fn getHoursF(self: Self) f32 {
         var hours: f32 = 0;
         if (self.weeks) |w|
             hours += @floatFromInt(w * 7 * 24);
@@ -28,7 +39,7 @@ pub const Time = struct {
         return hours;
     }
 
-    pub fn getSeconds(self: Time) i32 {
+    pub fn getSeconds(self: Self) i32 {
         var seconds: i32 = 0;
         if (self.weeks) |w|
             seconds += w * 60 * 60 * 24 * 7;
@@ -43,7 +54,7 @@ pub const Time = struct {
         return seconds;
     }
 
-    pub fn toReadable(self: Time) Time {
+    pub fn toReadable(self: Self) Self {
         var t = Time{ .seconds = self.getSeconds() };
         if (@abs(t.seconds.?) >= 7 * 24 * 60 * 60) {
             t.weeks = @divFloor(t.seconds.?, 7 * 24 * 60 * 60);
@@ -64,7 +75,7 @@ pub const Time = struct {
         return t;
     }
 
-    pub fn add(self: Time, other: Time) Time {
+    pub fn add(self: Self, other: Self) Self {
         const self_seconds = self.getSeconds();
         const other_seconds = other.getSeconds();
         return (Time{ .seconds = self_seconds + other_seconds }).toReadable();
@@ -180,8 +191,7 @@ pub const Date = struct {
         const rc = c.pcre_exec(re, null, str, @intCast(str.len), 0, 0, &ovector, 30);
 
         if (rc == c.PCRE_ERROR_NOMATCH) {
-            print("no match\n", .{});
-            return error.NoMatch;
+            return error.InvalidFormat;
         } else if (rc < -1) {
             print("error {d} from regex\n", .{rc});
             return error.RegexError;
@@ -320,6 +330,12 @@ pub const Date = struct {
 pub const Deadline = union(enum) {
     date: Date,
     time: Time,
+
+    pub fn toString(self: Deadline, allocator: std.mem.Allocator) ![]const u8 {
+        return switch (self) {
+            inline else => |x| x.toString(allocator),
+        };
+    }
 };
 
 pub const Pattern = struct {
@@ -330,15 +346,45 @@ pub const Pattern = struct {
     thu: bool = false,
     fri: bool = false,
     sat: bool = false,
+
+    pub fn toString(self: Pattern, allocator: std.mem.Allocator) ![]const u8 {
+        return std.fmt.allocPrint(allocator, "{}{}{}{}{}{}{}", .{
+            @as(u1, @intFromBool(self.sun)),
+            @as(u1, @intFromBool(self.mon)),
+            @as(u1, @intFromBool(self.tue)),
+            @as(u1, @intFromBool(self.wed)),
+            @as(u1, @intFromBool(self.thu)),
+            @as(u1, @intFromBool(self.fri)),
+            @as(u1, @intFromBool(self.sat)),
+        });
+    }
 };
 pub const Period = union(enum) {
     time: Time,
     pattern: Pattern,
+    pub fn toString(self: Deadline, allocator: std.mem.Allocator) ![]const u8 {
+        return switch (self) {
+            inline else => |x| x.toString(allocator),
+        };
+    }
 };
 pub const RepeatInfo = struct {
     period: Period,
     start: Date,
     end: ?Date = null,
+    pub fn toString(self: Deadline, allocator: std.mem.Allocator) ![]const u8 {
+        const period_str = self.period.toString(allocator);
+        const start_str = self.start.toString(allocator);
+        const end_str = if (self.end) |e| e.toString(allocator) else null;
+        defer allocator.free(period_str);
+        defer allocator.free(start_str);
+        defer allocator.free(end_str);
+        return std.fmt.allocPrint(allocator, "{s}\n{s}\n{?s}", .{
+            period_str,
+            start_str,
+            end_str,
+        });
+    }
 };
 pub const Event = struct {
     const Self = @This();

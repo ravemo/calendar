@@ -2,4 +2,5 @@
 zig-*
 data/
 lib/
+!src/lib/
 *.db
