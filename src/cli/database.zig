@@ -11,10 +11,11 @@ pub const Database = struct {
     db: ?*c.sqlite3,
     res: ?*c.sqlite3_stmt = undefined,
 
-    pub fn init(path: [:0]const u8) Self {
+    pub fn init(path: [:0]const u8) !Self {
         var db: ?*c.sqlite3 = undefined;
         if (c.SQLITE_OK != c.sqlite3_open(path, &db)) {
             print("Can't open database: {s}\n", .{c.sqlite3_errmsg(db)});
+            return error.InvalidPath;
         }
         return .{ .db = db };
     }

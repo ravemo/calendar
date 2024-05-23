@@ -3,10 +3,7 @@ const c = @cImport({
     @cInclude("pcre.h");
 });
 
-pub const RegexError = error{
-    NoMatches,
-    RegexError,
-};
+const StringError = @import("event.zig").StringError;
 
 pub const Captures = struct {
     const Self = @This();
@@ -14,7 +11,7 @@ pub const Captures = struct {
     str: [:0]const u8,
     matchCount: usize,
     ovector: [30]c_int,
-    pub fn sliceAt(self: *Self, i: usize) ?[]const u8 {
+    pub fn sliceAt(self: *Self, i: usize) ?[:0]const u8 {
         var substring: [*c]const u8 = null;
         _ = c.pcre_get_substring(
             self.str,
@@ -61,7 +58,7 @@ pub const Regex = struct {
         c.pcre_free.?(self.re);
     }
 
-    pub fn captures(self: Self, subject: [:0]const u8) RegexError!Captures {
+    pub fn captures(self: Self, subject: [:0]const u8) StringError!Captures {
         var ovector: [30]c_int = undefined;
         const rc = c.pcre_exec(self.re, null, subject, @intCast(subject.len), 0, 0, &ovector, 30);
 

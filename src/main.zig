@@ -6,6 +6,7 @@ const c = @cImport({
 });
 
 const calendar = @import("lib/event.zig");
+const StringError = calendar.StringError;
 const Event = calendar.Event;
 const Date = calendar.Date;
 const Time = calendar.Time;
@@ -14,8 +15,54 @@ const draw = @import("lib/draw.zig");
 const Renderer = draw.Renderer;
 const Surface = draw.Surface;
 
+const Database = @import("cli/database.zig").Database;
+
 const scrn_w = 800;
 const scrn_h = 600;
+
+fn callback(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*c]u8) callconv(.C) c_int {
+    const events: *std.ArrayList(Event) = @alignCast(@ptrCast(events_ptr));
+    const allocator = events.allocator;
+    var name: []const u8 = undefined;
+    var start: Date = undefined;
+    var end: calendar.Deadline = undefined;
+    var repeat: ?calendar.RepeatInfo = null;
+
+    for (0..@intCast(argc)) |i| {
+        const col = std.mem.span(cols[i]);
+        const val = if (argv[i]) |v| std.mem.span(v) else null;
+        if (std.mem.eql(u8, col, "Id")) {
+            // TODO
+        } else if (std.mem.eql(u8, col, "Name")) {
+            name = allocator.dupe(u8, val.?) catch return -1;
+        } else if (std.mem.eql(u8, col, "Start")) {
+            start = Date.fromString(val.?) catch return -1;
+        } else if (std.mem.eql(u8, col, "End")) {
+            end = calendar.Deadline.fromString(val.?) catch return -1;
+        } else if (std.mem.eql(u8, col, "Repeat")) {
+            if (val) |v| {
+                repeat = calendar.RepeatInfo.fromString(v) catch return -1;
+            }
+        }
+    }
+    events.append(Event.init(allocator, name, start, end, repeat) catch return -1) catch return -1;
+    std.debug.print("Loaded {} events.\n", .{events.items.len});
+    return 0;
+}
+
+fn loadEvents(allocator: std.mem.Allocator, db: Database) !std.ArrayList(Event) {
+    var events = std.ArrayList(Event).init(allocator);
+    std.debug.print("???\n", .{});
+    const query = try std.fmt.allocPrintZ(
+        allocator,
+        "SELECT * FROM Events;",
+        .{},
+    );
+    defer allocator.free(query);
+
+    try db.executeCB(query, callback, &events);
+    return events;
+}
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
@@ -44,7 +91,8 @@ pub fn main() !void {
 
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
 
-    var events = std.ArrayList(Event).init(allocator);
+    const db = try Database.init("calendar.db");
+    var events = try loadEvents(allocator, db);
     try events.append(try Event.init(
         allocator,
         "Dinner",

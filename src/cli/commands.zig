@@ -1,13 +1,13 @@
 const std = @import("std");
 const regexImport = @import("../lib/regex.zig");
 const Regex = regexImport.Regex;
-const RegexError = regexImport.RegexError;
 const Captures = regexImport.Captures;
 const Linenoise = @import("linenoise").Linenoise;
 
 const Database = @import("database.zig").Database;
 
 const calendar = @import("../lib/event.zig");
+const StringError = calendar.StringError;
 const Date = calendar.Date;
 
 const AddCmd = struct {
@@ -121,7 +121,7 @@ pub fn getCmd(allocator: std.mem.Allocator, str: [:0]const u8) !Cmd {
         var regex = try Regex.compile(T.pattern);
         defer regex.deinit();
         var cap_opt = regex.captures(str) catch |e| switch (e) {
-            RegexError.NoMatches => null,
+            StringError.NoMatches => null,
             else => return e,
         };
         if (cap_opt) |*cap|

@@ -14,6 +14,8 @@ pub fn buildGUI(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     exe.linkSystemLibrary("SDL2_image");
     exe.linkSystemLibrary("SDL2_ttf");
     exe.linkSystemLibrary("SDL2_mixer");
+    exe.linkSystemLibrary("pcre");
+    exe.linkSystemLibrary("sqlite3");
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);

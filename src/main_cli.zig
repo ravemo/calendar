@@ -4,7 +4,7 @@ const Database = @import("cli/database.zig").Database;
 const Linenoise = @import("linenoise").Linenoise;
 
 pub fn main() !void {
-    var db = Database.init("calendar.db");
+    var db = try Database.init("calendar.db");
     defer db.deinit();
 
     try db.execute(

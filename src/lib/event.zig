@@ -8,6 +8,11 @@ const Regex = regex.Regex;
 
 const print = std.debug.print;
 
+pub const StringError = error{
+    InvalidFormat,
+    RegexError,
+    NoMatches,
+};
 pub const Time = struct {
     const Self = @This();
     seconds: ?i32 = null,
@@ -16,7 +21,7 @@ pub const Time = struct {
     days: ?i32 = null,
     weeks: ?i32 = null,
 
-    pub fn fromString(str: [:0]const u8) !Self {
+    pub fn fromString(str: [:0]const u8) StringError!Self {
         const pattern = "(?'weeks'\\d) weeks, (?'days'\\d) days, (?'hours'\\d) hours, (?'minutes'\\d) minutes, (?'seconds'\\d) seconds";
 
         const re = try Regex.compile(pattern);
@@ -39,18 +44,17 @@ pub const Time = struct {
             .{ .str = "seconds", .val = .Seconds },
         };
         var time = Time{};
-        // loop through matches and return them
         for (parts) |part| {
             const name = part.str;
             const v = part.val;
             const substring = try cap.getNamedMatch(name);
             defer cap.deinitMatch(substring);
             switch (v) {
-                .Weeks => time.weeks = if (substring) |substr| try std.fmt.parseInt(i32, substr, 10) else null,
-                .Days => time.days = if (substring) |substr| try std.fmt.parseInt(i32, substr, 10) else null,
-                .Hours => time.hours = if (substring) |substr| try std.fmt.parseInt(i32, substr, 10) else null,
-                .Minutes => time.minutes = if (substring) |substr| try std.fmt.parseInt(i32, substr, 10) else null,
-                .Seconds => time.seconds = if (substring) |substr| try std.fmt.parseInt(i32, substr, 10) else null,
+                .Weeks => time.weeks = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat else null,
+                .Days => time.days = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat else null,
+                .Hours => time.hours = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat else null,
+                .Minutes => time.minutes = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat else null,
+                .Seconds => time.seconds = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat else null,
             }
         }
         return time;
@@ -209,7 +213,7 @@ pub const Date = struct {
         return .{ .tm = tm };
     }
 
-    pub fn fromString(str: [:0]const u8) !Date {
+    pub fn fromString(str: [:0]const u8) StringError!Date {
         const pattern_ymd = "^(?:(?'year'\\d{4})(?:-(?'month'\\d{2})(?:-(?'day'\\d{2}))?)?)?(?: ?(?'hours'\\d{2}):?(?'minutes'\\d{2}))?$";
         const pattern_md = "^(?:(\\d{2})-(\\d{2}))(?: (\\d{2}):?(\\d{2}))?$";
         _ = pattern_md; // TODO
@@ -234,7 +238,6 @@ pub const Date = struct {
             .{ .str = "minutes", .val = .Minutes },
         };
         var date = Date.default();
-        // loop through matches and return them
         for (parts) |part| {
             const name = part.str;
             const v = part.val;
@@ -242,11 +245,11 @@ pub const Date = struct {
             if (substring) |substr| {
                 print("{s}: {s}\n", .{ name, substr });
                 switch (v) {
-                    .Year => date.setYear(try std.fmt.parseInt(i32, substr, 10)),
-                    .Month => date.setMonth(try std.fmt.parseInt(i32, substr, 10)),
-                    .Day => date.setDay(try std.fmt.parseInt(i32, substr, 10)),
-                    .Hours => date.setHours(try std.fmt.parseInt(i32, substr, 10)),
-                    .Minutes => date.setMinutes(try std.fmt.parseInt(i32, substr, 10)),
+                    .Year => date.setYear(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
+                    .Month => date.setMonth(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
+                    .Day => date.setDay(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
+                    .Hours => date.setHours(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
+                    .Minutes => date.setMinutes(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
                 }
                 cap.deinitMatch(substr);
             }
@@ -359,6 +362,15 @@ pub const Deadline = union(enum) {
     date: Date,
     time: Time,
 
+    pub fn fromString(str: [:0]const u8) StringError!Deadline {
+        const v = Date.fromString(str) catch |e| {
+            switch (e) {
+                StringError.InvalidFormat => return .{ .time = try Time.fromString(str) },
+                else => return e,
+            }
+        };
+        return .{ .date = v };
+    }
     pub fn toString(self: Deadline, allocator: std.mem.Allocator) ![]const u8 {
         return switch (self) {
             inline else => |x| x.toString(allocator),
@@ -375,6 +387,33 @@ pub const Pattern = struct {
     fri: bool = false,
     sat: bool = false,
 
+    pub fn fromString(str: [:0]const u8) StringError!Pattern {
+        const pattern = "(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)(\\d)";
+
+        const re = try Regex.compile(pattern);
+        defer re.deinit();
+
+        var cap = try re.captures(str);
+
+        var p = Pattern{};
+        for (1..8) |i| {
+            const substr = cap.sliceAt(i).?;
+            defer cap.deinitMatch(substr);
+            const v = std.fmt.parseInt(i1, substr, 10) catch return StringError.InvalidFormat;
+            switch (i) {
+                1 => p.sun = (v == 1),
+                2 => p.mon = (v == 1),
+                3 => p.tue = (v == 1),
+                4 => p.wed = (v == 1),
+                5 => p.thu = (v == 1),
+                6 => p.fri = (v == 1),
+                7 => p.sat = (v == 1),
+                else => unreachable,
+            }
+        }
+        return p;
+    }
+
     pub fn toString(self: Pattern, allocator: std.mem.Allocator) ![]const u8 {
         return std.fmt.allocPrint(allocator, "{}{}{}{}{}{}{}", .{
             @as(u1, @intFromBool(self.sun)),
@@ -390,35 +429,14 @@ pub const Pattern = struct {
 pub const Period = union(enum) {
     time: Time,
     pattern: Pattern,
-    pub fn fromString(str: [:0]const u8) !Period {
-        const pattern = "(?'period_str'.*)\n(?'start_str'.*)\n(?'end_str'.*)";
-
-        const re = try Regex.compile(pattern);
-        defer re.deinit();
-
-        var cap = try re.captures(str);
-
-        const PeriodPart = enum {
-            Time,
-            Pattern,
-        };
-        const parts = [_]struct { str: [:0]const u8, val: PeriodPart }{
-            .{ .str = "time", .val = .Time },
-            .{ .str = "pattern", .val = .Pattern },
-        };
-        var period = Period{ .time = undefined, .pattern = undefined };
-        // loop through matches and return them
-        for (parts) |part| {
-            const name = part.str;
-            const v = part.val;
-            const substring = try cap.getNamedMatch(name);
-            defer cap.deinitMatch(substring);
-            switch (v) {
-                .Period => period.time = try Time.fromString(substring.?),
-                .Start => period.pattern = try Pattern.fromString(substring.?),
+    pub fn fromString(str: [:0]const u8) StringError!Period {
+        const v = Pattern.fromString(str) catch |e| {
+            switch (e) {
+                StringError.InvalidFormat => return .{ .time = try Time.fromString(str) },
+                else => return e,
             }
-        }
-        return period;
+        };
+        return .{ .pattern = v };
     }
     pub fn toString(self: Deadline, allocator: std.mem.Allocator) ![]const u8 {
         return switch (self) {
@@ -430,7 +448,7 @@ pub const RepeatInfo = struct {
     period: Period,
     start: Date,
     end: ?Date = null,
-    pub fn fromString(str: [:0]const u8) !RepeatInfo {
+    pub fn fromString(str: [:0]const u8) StringError!RepeatInfo {
         const pattern = "(?'period_str'.*)\n(?'start_str'.*)\n(?'end_str'.*)";
 
         const re = try Regex.compile(pattern);
@@ -448,17 +466,16 @@ pub const RepeatInfo = struct {
             .{ .str = "start", .val = .Start },
             .{ .str = "end", .val = .End },
         };
-        var info = RepeatInfo{};
-        // loop through matches and return them
+        var info = RepeatInfo{ .period = undefined, .start = undefined };
         for (parts) |part| {
             const name = part.str;
             const v = part.val;
             const substring = try cap.getNamedMatch(name);
             defer cap.deinitMatch(substring);
             switch (v) {
-                .Period => info.weeks = try Period.fromString(substring.?),
-                .Start => info.days = try Date.fromString(substring.?),
-                .End => info.hours = if (substring) |substr| try Date.fromString(substr) else null,
+                .Period => info.period = try Period.fromString(substring.?),
+                .Start => info.start = try Date.fromString(substring.?),
+                .End => info.end = if (substring) |substr| try Date.fromString(substr) else null,
             }
         }
         return info;
