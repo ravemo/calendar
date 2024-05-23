@@ -3,6 +3,8 @@ const c = @cImport({
     @cInclude("time.h");
     @cInclude("pcre.h");
 });
+const regex = @import("regex.zig");
+const Regex = regex.Regex;
 
 const print = std.debug.print;
 
@@ -181,49 +183,37 @@ pub const Date = struct {
         const pattern_md = "^(?:(\\d{2})-(\\d{2}))(?: (\\d{2}):?(\\d{2}))?$";
         _ = pattern_md; // TODO
 
-        var err: [*c]u8 = undefined;
-        var erroffset: c_int = undefined;
-        var ovector: [30]c_int = undefined;
+        const re = try Regex.compile(pattern_ymd);
+        defer re.deinit();
 
-        const re = c.pcre_compile(pattern_ymd, 0, (&err), &erroffset, null).?;
-        defer c.pcre_free.?(re);
+        var cap = try re.captures(str);
 
-        const rc = c.pcre_exec(re, null, str, @intCast(str.len), 0, 0, &ovector, 30);
-
-        if (rc == c.PCRE_ERROR_NOMATCH) {
-            return error.InvalidFormat;
-        } else if (rc < -1) {
-            print("error {d} from regex\n", .{rc});
-            return error.RegexError;
-        } else {
-            const parts = [_]struct { str: [:0]const u8, val: DatePart }{
-                .{ .str = "year", .val = .Year },
-                .{ .str = "month", .val = .Month },
-                .{ .str = "day", .val = .Day },
-                .{ .str = "hours", .val = .Hours },
-                .{ .str = "minutes", .val = .Minutes },
-            };
-            var date = Date.default();
-            // loop through matches and return them
-            for (parts) |part| {
-                const name = part.str;
-                const v = part.val;
-                var substring: [*c]const u8 = null;
-                _ = c.pcre_get_named_substring(re, str, @ptrCast(&ovector), rc, name, &substring);
-                if (substring != null) {
-                    print("{s}: {s}\n", .{ name, substring });
-                    switch (v) {
-                        .Year => date.setYear(try std.fmt.parseInt(i32, std.mem.span(substring), 10)),
-                        .Month => date.setMonth(try std.fmt.parseInt(i32, std.mem.span(substring), 10)),
-                        .Day => date.setDay(try std.fmt.parseInt(i32, std.mem.span(substring), 10)),
-                        .Hours => date.setHours(try std.fmt.parseInt(i32, std.mem.span(substring), 10)),
-                        .Minutes => date.setMinutes(try std.fmt.parseInt(i32, std.mem.span(substring), 10)),
-                    }
-                    c.pcre_free_substring(substring);
+        const parts = [_]struct { str: [:0]const u8, val: DatePart }{
+            .{ .str = "year", .val = .Year },
+            .{ .str = "month", .val = .Month },
+            .{ .str = "day", .val = .Day },
+            .{ .str = "hours", .val = .Hours },
+            .{ .str = "minutes", .val = .Minutes },
+        };
+        var date = Date.default();
+        // loop through matches and return them
+        for (parts) |part| {
+            const name = part.str;
+            const v = part.val;
+            const substring = try cap.getNamedMatch(name);
+            if (substring) |substr| {
+                print("{s}: {s}\n", .{ name, substr });
+                switch (v) {
+                    .Year => date.setYear(try std.fmt.parseInt(i32, substr, 10)),
+                    .Month => date.setMonth(try std.fmt.parseInt(i32, substr, 10)),
+                    .Day => date.setDay(try std.fmt.parseInt(i32, substr, 10)),
+                    .Hours => date.setHours(try std.fmt.parseInt(i32, substr, 10)),
+                    .Minutes => date.setMinutes(try std.fmt.parseInt(i32, substr, 10)),
                 }
+                cap.deinitMatch(substr);
             }
-            return date;
         }
+        return date;
     }
 
     pub fn toString(self: Self, allocator: std.mem.Allocator) ![]const u8 {

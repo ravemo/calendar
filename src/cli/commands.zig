@@ -71,7 +71,6 @@ const ViewCmd = struct {
         return .{};
     }
     fn callback(_: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*c]u8) callconv(.C) c_int {
-        std.debug.print("argc = {d}\n", .{argc});
         for (0..@intCast(argc)) |i| {
             if (argv[i] == null) {
                 std.debug.print("{s}: null\n", .{cols[i]});
