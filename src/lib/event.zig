@@ -16,6 +16,45 @@ pub const Time = struct {
     days: ?i32 = null,
     weeks: ?i32 = null,
 
+    pub fn fromString(str: [:0]const u8) !Self {
+        const pattern = "(?'weeks'\\d) weeks, (?'days'\\d) days, (?'hours'\\d) hours, (?'minutes'\\d) minutes, (?'seconds'\\d) seconds";
+
+        const re = try Regex.compile(pattern);
+        defer re.deinit();
+
+        var cap = try re.captures(str);
+
+        const TimePart = enum {
+            Weeks,
+            Days,
+            Hours,
+            Minutes,
+            Seconds,
+        };
+        const parts = [_]struct { str: [:0]const u8, val: TimePart }{
+            .{ .str = "weeks", .val = .Weeks },
+            .{ .str = "days", .val = .Days },
+            .{ .str = "hours", .val = .Hours },
+            .{ .str = "minutes", .val = .Minutes },
+            .{ .str = "seconds", .val = .Seconds },
+        };
+        var time = Time{};
+        // loop through matches and return them
+        for (parts) |part| {
+            const name = part.str;
+            const v = part.val;
+            const substring = try cap.getNamedMatch(name);
+            defer cap.deinitMatch(substring);
+            switch (v) {
+                .Weeks => time.weeks = if (substring) |substr| try std.fmt.parseInt(i32, substr, 10) else null,
+                .Days => time.days = if (substring) |substr| try std.fmt.parseInt(i32, substr, 10) else null,
+                .Hours => time.hours = if (substring) |substr| try std.fmt.parseInt(i32, substr, 10) else null,
+                .Minutes => time.minutes = if (substring) |substr| try std.fmt.parseInt(i32, substr, 10) else null,
+                .Seconds => time.seconds = if (substring) |substr| try std.fmt.parseInt(i32, substr, 10) else null,
+            }
+        }
+        return time;
+    }
     pub fn toString(self: Self, allocator: std.mem.Allocator) ![]const u8 {
         return std.fmt.allocPrint(allocator, "{?} weeks, {?} days, {?} hours, {?} minutes, {?} seconds", .{
             @as(i32, @intFromBool(self.weeks)),
@@ -351,6 +390,36 @@ pub const Pattern = struct {
 pub const Period = union(enum) {
     time: Time,
     pattern: Pattern,
+    pub fn fromString(str: [:0]const u8) !Period {
+        const pattern = "(?'period_str'.*)\n(?'start_str'.*)\n(?'end_str'.*)";
+
+        const re = try Regex.compile(pattern);
+        defer re.deinit();
+
+        var cap = try re.captures(str);
+
+        const PeriodPart = enum {
+            Time,
+            Pattern,
+        };
+        const parts = [_]struct { str: [:0]const u8, val: PeriodPart }{
+            .{ .str = "time", .val = .Time },
+            .{ .str = "pattern", .val = .Pattern },
+        };
+        var period = Period{ .time = undefined, .pattern = undefined };
+        // loop through matches and return them
+        for (parts) |part| {
+            const name = part.str;
+            const v = part.val;
+            const substring = try cap.getNamedMatch(name);
+            defer cap.deinitMatch(substring);
+            switch (v) {
+                .Period => period.time = try Time.fromString(substring.?),
+                .Start => period.pattern = try Pattern.fromString(substring.?),
+            }
+        }
+        return period;
+    }
     pub fn toString(self: Deadline, allocator: std.mem.Allocator) ![]const u8 {
         return switch (self) {
             inline else => |x| x.toString(allocator),
@@ -361,6 +430,39 @@ pub const RepeatInfo = struct {
     period: Period,
     start: Date,
     end: ?Date = null,
+    pub fn fromString(str: [:0]const u8) !RepeatInfo {
+        const pattern = "(?'period_str'.*)\n(?'start_str'.*)\n(?'end_str'.*)";
+
+        const re = try Regex.compile(pattern);
+        defer re.deinit();
+
+        var cap = try re.captures(str);
+
+        const RepeatPart = enum {
+            Period,
+            Start,
+            End,
+        };
+        const parts = [_]struct { str: [:0]const u8, val: RepeatPart }{
+            .{ .str = "period", .val = .Period },
+            .{ .str = "start", .val = .Start },
+            .{ .str = "end", .val = .End },
+        };
+        var info = RepeatInfo{};
+        // loop through matches and return them
+        for (parts) |part| {
+            const name = part.str;
+            const v = part.val;
+            const substring = try cap.getNamedMatch(name);
+            defer cap.deinitMatch(substring);
+            switch (v) {
+                .Period => info.weeks = try Period.fromString(substring.?),
+                .Start => info.days = try Date.fromString(substring.?),
+                .End => info.hours = if (substring) |substr| try Date.fromString(substr) else null,
+            }
+        }
+        return info;
+    }
     pub fn toString(self: Deadline, allocator: std.mem.Allocator) ![]const u8 {
         const period_str = self.period.toString(allocator);
         const start_str = self.start.toString(allocator);

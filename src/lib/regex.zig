@@ -3,6 +3,11 @@ const c = @cImport({
     @cInclude("pcre.h");
 });
 
+pub const RegexError = error{
+    NoMatches,
+    RegexError,
+};
+
 pub const Captures = struct {
     const Self = @This();
     re: Regex,
@@ -56,12 +61,12 @@ pub const Regex = struct {
         c.pcre_free.?(self.re);
     }
 
-    pub fn captures(self: Self, subject: [:0]const u8) !Captures {
+    pub fn captures(self: Self, subject: [:0]const u8) RegexError!Captures {
         var ovector: [30]c_int = undefined;
         const rc = c.pcre_exec(self.re, null, subject, @intCast(subject.len), 0, 0, &ovector, 30);
 
         if (rc == c.PCRE_ERROR_NOMATCH) {
-            return error.InvalidFormat;
+            return error.NoMatches;
         } else if (rc < -1) {
             std.debug.print("error {d} from regex\n", .{rc});
             return error.RegexError;
