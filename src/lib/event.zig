@@ -21,6 +21,11 @@ pub const Time = struct {
     days: ?i32 = null,
     weeks: ?i32 = null,
 
+    pub fn initS(seconds: i32) Self {
+        const t = Time{ .seconds = seconds };
+        return t.toReadable();
+    }
+
     pub fn fromString(str: [:0]const u8) StringError!Self {
         const pattern = "(?'weeks'\\d) weeks, (?'days'\\d) days, (?'hours'\\d) hours, (?'minutes'\\d) minutes, (?'seconds'\\d) seconds";
 
@@ -124,6 +129,12 @@ pub const Time = struct {
         const self_seconds = self.getSeconds();
         const other_seconds = other.getSeconds();
         return (Time{ .seconds = self_seconds + other_seconds }).toReadable();
+    }
+
+    pub fn sub(self: Self, other: Self) Self {
+        const self_seconds = self.getSeconds();
+        const other_seconds = other.getSeconds();
+        return (Time{ .seconds = self_seconds - other_seconds }).toReadable();
     }
 };
 
@@ -310,6 +321,9 @@ pub const Date = struct {
         const t1 = c.mktime(&tm1);
         return @intFromFloat(c.difftime(t0, t1));
     }
+    pub fn timeSince(self: Self, other: Self) Time {
+        return Time.initS(self.secondsSince(other));
+    }
 
     pub fn isBefore(self: Self, other: Self) bool {
         var tm0 = self.tm;
@@ -370,25 +384,6 @@ pub const Date = struct {
     }
 
     // TODO
-};
-pub const Deadline = union(enum) {
-    date: Date,
-    time: Time,
-
-    pub fn fromString(str: [:0]const u8) StringError!Deadline {
-        const v = Date.fromString(str) catch |e| {
-            switch (e) {
-                StringError.InvalidFormat => return .{ .time = try Time.fromString(str) },
-                else => return e,
-            }
-        };
-        return .{ .date = v };
-    }
-    pub fn toString(self: Deadline, allocator: std.mem.Allocator) ![]const u8 {
-        return switch (self) {
-            inline else => |x| x.toString(allocator),
-        };
-    }
 };
 
 pub const Pattern = struct {
@@ -451,13 +446,14 @@ pub const Period = union(enum) {
         };
         return .{ .pattern = v };
     }
-    pub fn toString(self: Deadline, allocator: std.mem.Allocator) ![]const u8 {
+    pub fn toString(self: Period, allocator: std.mem.Allocator) ![]const u8 {
         return switch (self) {
             inline else => |x| x.toString(allocator),
         };
     }
 };
 pub const RepeatInfo = struct {
+    const Self = @This();
     period: Period,
     start: Date,
     end: ?Date = null,
@@ -493,7 +489,7 @@ pub const RepeatInfo = struct {
         }
         return info;
     }
-    pub fn toString(self: Deadline, allocator: std.mem.Allocator) ![]const u8 {
+    pub fn toString(self: Self, allocator: std.mem.Allocator) ![]const u8 {
         const period_str = self.period.toString(allocator);
         const start_str = self.start.toString(allocator);
         const end_str = if (self.end) |e| e.toString(allocator) else null;
@@ -512,17 +508,17 @@ pub const Event = struct {
     id: i32,
     name: []const u8,
     start: Date,
-    end: Deadline,
+    duration: Time,
     // either nothing, a date or the start_time offset by some duration.
     repeat: ?RepeatInfo,
 
-    pub fn init(allocator: anytype, id: i32, name: []const u8, start: Date, end: Deadline, repeat: ?RepeatInfo) !Self {
+    pub fn init(allocator: anytype, id: i32, name: []const u8, start: Date, duration: Time, repeat: ?RepeatInfo) !Self {
         _ = allocator;
         return .{
             .id = id,
             .name = name,
             .start = start,
-            .end = end,
+            .duration = duration,
             .repeat = repeat,
         };
     }
@@ -539,9 +535,6 @@ pub const Event = struct {
     }
 
     pub fn getEnd(self: Self) Date {
-        return switch (self.end) {
-            .time => |t| self.start.after(t),
-            .date => |e| e,
-        };
+        return self.start.after(self.duration);
     }
 };

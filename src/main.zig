@@ -26,7 +26,7 @@ fn callback(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*
     var id: i32 = undefined;
     var name: []const u8 = undefined;
     var start: Date = undefined;
-    var end: calendar.Deadline = undefined;
+    var end: calendar.Date = undefined;
     var repeat: ?calendar.RepeatInfo = null;
 
     for (0..@intCast(argc)) |i| {
@@ -39,14 +39,14 @@ fn callback(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*
         } else if (std.mem.eql(u8, col, "Start")) {
             start = Date.fromString(val.?) catch return -1;
         } else if (std.mem.eql(u8, col, "End")) {
-            end = calendar.Deadline.fromString(val.?) catch return -1;
+            end = calendar.Date.fromString(val.?) catch return -1;
         } else if (std.mem.eql(u8, col, "Repeat")) {
             if (val) |v| {
                 repeat = calendar.RepeatInfo.fromString(v) catch return -1;
             }
         }
     }
-    events.append(Event.init(allocator, id, name, start, end, repeat) catch return -1) catch return -1;
+    events.append(Event.init(allocator, id, name, start, end.timeSince(start), repeat) catch return -1) catch return -1;
     std.debug.print("Loaded {} events.\n", .{events.items.len});
     return 0;
 }
@@ -153,14 +153,6 @@ pub fn main() !void {
 
                         ev_ptr.start.setDay(oev.start.getDay() + d_day);
                         ev_ptr.start.setHourF(oev.start.getHourF() + d_hr);
-                        switch (ev_ptr.end) {
-                            .date => |*d| {
-                                const last_d = oev.end.date;
-                                d.setDay(last_d.getDay() + d_day);
-                                d.setHourF(last_d.getHourF() + d_hr);
-                            },
-                            .time => return error.TODO,
-                        }
                     }
                 },
                 else => {},

@@ -53,22 +53,16 @@ pub fn drawSingleEvent(sf: *Surface, event: Event) !void {
     {
         const split = event.start.after(.{ .days = 1 }).getDayStart();
         var head = event;
-        head.end = .{ .date = split };
+        head.duration = split.timeSince(event.start);
         try drawSingleEvent(sf, head);
 
         var tail = event;
         tail.start = split;
-        switch (tail.end) {
-            .time => |*t| t.* = t.add(.{ .seconds = -head.getEnd().secondsSince(head.start) }),
-            else => {},
-        }
+        tail.duration = tail.duration.sub(head.duration);
         try drawSingleEvent(sf, tail);
         return;
     }
-    const h = switch (event.end) {
-        .time => |t| t.getHoursF(),
-        .date => |d| d.hoursSinceF(event.start),
-    };
+    const h = event.duration.getHoursF();
 
     const x = xFromWeekday(event.start.getWeekday(), sf.w) + 3;
     const y = yFromHour(event.start.getHourF(), sf.h);
