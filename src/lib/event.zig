@@ -15,11 +15,11 @@ pub const StringError = error{
 };
 pub const Time = struct {
     const Self = @This();
-    seconds: ?i32 = null,
-    minutes: ?i32 = null,
-    hours: ?i32 = null,
-    days: ?i32 = null,
-    weeks: ?i32 = null,
+    seconds: i32 = 0,
+    minutes: i32 = 0,
+    hours: i32 = 0,
+    days: i32 = 0,
+    weeks: i32 = 0,
 
     pub fn initS(seconds: i32) Self {
         const t = Time{ .seconds = seconds };
@@ -60,73 +60,62 @@ pub const Time = struct {
             const v = part.val;
             const substring = try cap.getNamedMatch(name);
             defer cap.deinitMatch(substring);
+            const int_val = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch {
+                return StringError.InvalidFormat;
+            } else 0;
             switch (v) {
-                .Weeks => time.weeks = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat else null,
-                .Days => time.days = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat else null,
-                .Hours => time.hours = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat else null,
-                .Minutes => time.minutes = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat else null,
-                .Seconds => time.seconds = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat else null,
+                .Weeks => time.weeks = int_val,
+                .Days => time.days = int_val,
+                .Hours => time.hours = int_val,
+                .Minutes => time.minutes = int_val,
+                .Seconds => time.seconds = int_val,
             }
         }
         return time;
     }
     pub fn toString(self: Self, allocator: std.mem.Allocator) ![]const u8 {
-        return std.fmt.allocPrint(allocator, "{?} weeks, {?} days, {?} hours, {?} minutes, {?} seconds", .{
-            @as(i32, @intFromBool(self.weeks)),
-            @as(i32, @intFromBool(self.days)),
-            @as(i32, @intFromBool(self.hours)),
-            @as(i32, @intFromBool(self.minutes)),
-            @as(i32, @intFromBool(self.seconds)),
+        return std.fmt.allocPrint(allocator, "{} weeks, {} days, {} hours, {} minutes, {} seconds", .{
+            self.weeks, self.days, self.hours, self.minutes, self.seconds,
         });
     }
 
     pub fn getHoursF(self: Self) f32 {
         var hours: f32 = 0;
-        if (self.weeks) |w|
-            hours += @floatFromInt(w * 7 * 24);
-        if (self.days) |d|
-            hours += @floatFromInt(d * 24);
-        if (self.hours) |h|
-            hours += @floatFromInt(h);
-        if (self.minutes) |m|
-            hours += @as(f32, @floatFromInt(m)) / 60;
-        if (self.seconds) |s|
-            hours += @as(f32, @floatFromInt(s)) / (60 * 60);
+        hours += @floatFromInt(self.weeks * 7 * 24);
+        hours += @floatFromInt(self.days * 24);
+        hours += @floatFromInt(self.hours);
+        hours += @as(f32, @floatFromInt(self.minutes)) / 60;
+        hours += @as(f32, @floatFromInt(self.seconds)) / (60 * 60);
         return hours;
     }
 
     pub fn getSeconds(self: Self) i32 {
         var seconds: i32 = 0;
-        if (self.weeks) |w|
-            seconds += w * 60 * 60 * 24 * 7;
-        if (self.days) |d|
-            seconds += d * 60 * 60 * 24;
-        if (self.hours) |h|
-            seconds += h * 60 * 60;
-        if (self.minutes) |m|
-            seconds += m * 60;
-        if (self.seconds) |s|
-            seconds += s;
+        seconds += self.weeks * 60 * 60 * 24 * 7;
+        seconds += self.days * 60 * 60 * 24;
+        seconds += self.hours * 60 * 60;
+        seconds += self.minutes * 60;
+        seconds += self.seconds;
         return seconds;
     }
 
     pub fn toReadable(self: Self) Self {
         var t = Time{ .seconds = self.getSeconds() };
-        if (@abs(t.seconds.?) >= 7 * 24 * 60 * 60) {
-            t.weeks = @divFloor(t.seconds.?, 7 * 24 * 60 * 60);
-            t.seconds.? -= t.weeks.? * 7 * 24 * 60 * 60;
+        if (@abs(t.seconds) >= 7 * 24 * 60 * 60) {
+            t.weeks = @divFloor(t.seconds, 7 * 24 * 60 * 60);
+            t.seconds -= t.weeks * 7 * 24 * 60 * 60;
         }
-        if (@abs(t.seconds.?) >= 24 * 60 * 60) {
-            t.days = @divFloor(t.seconds.?, 24 * 60 * 60);
-            t.seconds.? -= t.days.? * 24 * 60 * 60;
+        if (@abs(t.seconds) >= 24 * 60 * 60) {
+            t.days = @divFloor(t.seconds, 24 * 60 * 60);
+            t.seconds -= t.days * 24 * 60 * 60;
         }
-        if (@abs(t.seconds.?) >= 60 * 60) {
-            t.hours = @divFloor(t.seconds.?, 60 * 60);
-            t.seconds.? -= t.hours.? * 60 * 60;
+        if (@abs(t.seconds) >= 60 * 60) {
+            t.hours = @divFloor(t.seconds, 60 * 60);
+            t.seconds -= t.hours * 60 * 60;
         }
-        if (@abs(t.seconds.?) >= 60) {
-            t.minutes = @divFloor(t.seconds.?, 60);
-            t.seconds.? -= t.minutes.? * 60;
+        if (@abs(t.seconds) >= 60) {
+            t.minutes = @divFloor(t.seconds, 60);
+            t.seconds -= t.minutes * 60;
         }
         return t;
     }
@@ -347,16 +336,11 @@ pub const Date = struct {
 
     pub fn after(self: Self, offset: Time) Self {
         var new_tm = self.tm;
-        if (offset.seconds) |s|
-            new_tm.tm_min = new_tm.tm_sec + s;
-        if (offset.minutes) |m|
-            new_tm.tm_min = new_tm.tm_min + m;
-        if (offset.hours) |h|
-            new_tm.tm_hour = new_tm.tm_hour + h;
-        if (offset.days) |d|
-            new_tm.tm_mday = new_tm.tm_mday + d;
-        if (offset.weeks) |w|
-            new_tm.tm_mday = new_tm.tm_mday + w * 7;
+        new_tm.tm_min = new_tm.tm_sec + offset.seconds;
+        new_tm.tm_min = new_tm.tm_min + offset.minutes;
+        new_tm.tm_hour = new_tm.tm_hour + offset.hours;
+        new_tm.tm_mday = new_tm.tm_mday + offset.days;
+        new_tm.tm_mday = new_tm.tm_mday + offset.weeks * 7;
         _ = c.mktime(&new_tm);
         return .{ .tm = new_tm };
     }
