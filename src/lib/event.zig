@@ -25,6 +25,12 @@ pub const Time = struct {
         const t = Time{ .seconds = seconds };
         return t.toReadable();
     }
+    pub fn initH(hours: i32) Self {
+        return Time.initS(hours * 60 * 60).toReadable();
+    }
+    pub fn initHF(hoursF: f32) Self {
+        return Time.initS(@intFromFloat(@round(hoursF * 60 * 60))).toReadable();
+    }
 
     pub fn fromString(str: [:0]const u8) StringError!Self {
         const pattern = "(?'weeks'\\d) weeks, (?'days'\\d) days, (?'hours'\\d) hours, (?'minutes'\\d) minutes, (?'seconds'\\d) seconds";

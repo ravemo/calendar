@@ -91,6 +91,10 @@ pub fn main() !void {
 
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
 
+    const normal_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_ARROW);
+    const hand_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_HAND);
+    const sizens_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_SIZENS);
+
     const db = try Database.init("calendar.db");
     var events = try loadEvents(allocator, db);
     events = events;
@@ -103,6 +107,7 @@ pub fn main() !void {
     defer week_surface.deinit();
 
     var dragging_event: ?*Event = null;
+    var is_dragging_end = false; // Whether you are dragging the start of the event or the end
     var original_dragging_event: ?Event = null;
     var dragging_start_x: i32 = undefined;
     var dragging_start_y: i32 = undefined;
@@ -139,8 +144,8 @@ pub fn main() !void {
                     if (dragging_event) |ev_ptr| {
                         const x0 = week_surface.x;
                         const y0 = week_surface.y;
-                        const mx: f32 = @floatFromInt(ev.button.x);
-                        const my: f32 = @floatFromInt(ev.button.y);
+                        const mx: f32 = @floatFromInt(ev.motion.x);
+                        const my: f32 = @floatFromInt(ev.motion.y);
                         const oev = original_dragging_event.?;
                         const new_day = draw.weekdayFromX(mx - x0, week_surface.w);
                         const new_hr = draw.hourFromY(my - y0, week_surface.h);
@@ -148,11 +153,24 @@ pub fn main() !void {
                         const old_day = draw.weekdayFromX(@as(f32, @floatFromInt(dragging_start_x)) - x0, week_surface.w);
                         const old_hr = draw.hourFromY(@as(f32, @floatFromInt(dragging_start_y)) - y0, week_surface.h);
 
-                        const d_day = new_day - old_day;
-                        const d_hr = new_hr - old_hr;
+                        const d_day: i32 = new_day - old_day;
+                        var d_hr: f32 = new_hr - old_hr;
+                        d_hr = @round(d_hr * 2) / 2; // Move in steps of 30 minutes
 
-                        ev_ptr.start.setDay(oev.start.getDay() + d_day);
-                        ev_ptr.start.setHourF(oev.start.getHourF() + d_hr);
+                        if (is_dragging_end) {
+                            d_hr = d_hr + @as(f32, @floatFromInt(d_day)) * 24;
+                            ev_ptr.duration = oev.duration.add(Time.initHF(d_hr));
+                        } else { // if dragging the end point of the event
+                            ev_ptr.start.setDay(oev.start.getDay() + d_day);
+                            ev_ptr.start.setHourF(oev.start.getHourF() + d_hr);
+                        }
+                    } else {
+                        if (week_surface.getEventRectBelow(ev.motion.x, ev.motion.y)) |er| {
+                            is_dragging_end = week_surface.isHoveringEnd(ev.motion.x, ev.motion.y, er);
+                            c.SDL_SetCursor(if (is_dragging_end) sizens_cursor else hand_cursor);
+                        } else {
+                            c.SDL_SetCursor(normal_cursor);
+                        }
                     }
                 },
                 else => {},

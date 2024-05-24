@@ -62,6 +62,13 @@ pub const Surface = struct {
         return null;
     }
 
+    pub fn isHoveringEnd(self: Self, x: i32, y: i32, er: EventRect) bool {
+        // TODO Some EventRects don't have ends (those that wrap around midnight)
+        const xf: f32 = @as(f32, @floatFromInt(x)) - self.x;
+        const yf: f32 = @as(f32, @floatFromInt(y)) - self.y;
+        return er.isInside(xf, yf) and yf > er.rect.y + er.rect.h - 16;
+    }
+
     pub fn getRect(self: Self) c.SDL_Rect {
         return .{
             .x = @intFromFloat(self.x),
