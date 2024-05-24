@@ -122,19 +122,27 @@ pub fn main() !void {
                 c.SDL_QUIT => break :mainLoop,
                 c.SDL_KEYDOWN => switch (ev.key.keysym.scancode) {
                     c.SDL_SCANCODE_Q => break :mainLoop,
-                    else => {},
+                    c.SDL_SCANCODE_COMMA, c.SDL_SCANCODE_PERIOD => |sc| {
+                        if (ev.key.keysym.mod & c.KMOD_SHIFT != 0) {
+                            // tmp = 0 if comma, 1 if period
+                            const tmp: i32 = @intCast(sc - c.SDL_SCANCODE_COMMA);
+                            const d_weeks = tmp * 2 - 1;
+                            weekview.start = weekview.start.after(.{ .weeks = d_weeks });
+                        }
+                    },
+                    else => {
+                        std.debug.print("Unhandled key: {}\n", .{ev.key.keysym.scancode});
+                    },
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
                     if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
                         for (events.items) |*e| {
-                            if (e.id == er.evid) {
-                                std.debug.print("{}\n", .{er.evid});
-                                dragging_start_x = ev.button.x;
-                                dragging_start_y = ev.button.y;
-                                dragging_event = e;
-                                original_dragging_event = e.*;
-                                break;
-                            }
+                            if (e.id != er.evid) continue;
+                            dragging_start_x = ev.button.x;
+                            dragging_start_y = ev.button.y;
+                            dragging_event = e;
+                            original_dragging_event = e.*;
+                            break;
                         }
                     }
                 },
@@ -182,7 +190,7 @@ pub fn main() !void {
 
         try draw.drawWeek(&weekview, events.items, Date.now());
         draw.drawHours(hours_surface, Date.now());
-        draw.drawDays(days_surface, Date.now());
+        draw.drawDays(days_surface, weekview.start);
 
         _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xEE, 0xFF, 0xFF);
         _ = c.SDL_RenderClear(renderer);

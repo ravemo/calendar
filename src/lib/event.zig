@@ -337,6 +337,13 @@ pub const Date = struct {
         const t1 = c.mktime(&tm1);
         return c.difftime(t0, t1) < 0;
     }
+    pub fn isBeforeEq(self: Self, other: Self) bool {
+        var tm0 = self.tm;
+        var tm1 = other.tm;
+        const t0 = c.mktime(&tm0);
+        const t1 = c.mktime(&tm1);
+        return c.difftime(t0, t1) <= 0;
+    }
 
     pub fn after(self: Self, offset: Time) Self {
         var new_tm = self.tm;

@@ -1,5 +1,6 @@
 const std = @import("std");
 const Surface = @import("surface.zig").Surface;
+const Date = @import("event.zig").Date;
 
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
@@ -19,10 +20,12 @@ pub const WeekView = struct {
     const Self = @This();
     sf: Surface,
     eventRects: std.ArrayList(EventRect),
+    start: Date,
     pub fn init(allocator: std.mem.Allocator, renderer: Renderer, scrn_w: f32, scrn_h: f32) Self {
         return .{
             .sf = Surface.init(renderer, 64, 96, scrn_w - 64, scrn_h - 96),
             .eventRects = std.ArrayList(EventRect).init(allocator),
+            .start = Date.now().getWeekStart(),
         };
     }
     pub fn deinit(self: Self) void {
@@ -47,5 +50,9 @@ pub const WeekView = struct {
         const xf: f32 = @as(f32, @floatFromInt(x)) - self.sf.x;
         const yf: f32 = @as(f32, @floatFromInt(y)) - self.sf.y;
         return er.isInside(xf, yf) and yf > er.rect.y + er.rect.h - 16;
+    }
+
+    pub fn getEnd(self: Self) Date {
+        return self.start.after(.{ .weeks = 1 });
     }
 };

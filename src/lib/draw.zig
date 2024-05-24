@@ -63,10 +63,24 @@ pub fn drawSingleEvent(wv: *WeekView, event: Event) !void {
         try drawSingleEvent(wv, tail);
         return;
     }
-    const h = event.duration.getHoursF();
 
-    const x = xFromWeekday(event.start.getWeekday(), wv.sf.w) + 3;
-    const y = yFromHour(event.start.getHourF(), wv.sf.h);
+    var draw_event = event;
+    // if event starts after end of current view or ends before start of current
+    // view, don't even draw it
+    if (wv.getEnd().isBeforeEq(draw_event.start) or
+        draw_event.getEnd().isBeforeEq(wv.start))
+        return;
+    // If event starts before current view, set start to start of current view
+    if (draw_event.start.isBefore(wv.start))
+        draw_event.start = wv.start;
+    // If event end after current view, set end to end of current view
+    if (wv.getEnd().isBefore(draw_event.getEnd()))
+        draw_event.duration = wv.getEnd().timeSince(draw_event.start);
+
+    const h = draw_event.duration.getHoursF();
+
+    const x = xFromWeekday(draw_event.start.getWeekday(), wv.sf.w) + 3;
+    const y = yFromHour(draw_event.start.getHourF(), wv.sf.h);
     arc.setColor(renderer, event_color);
     const rect = c.SDL_FRect{
         .x = x,
@@ -76,23 +90,24 @@ pub fn drawSingleEvent(wv: *WeekView, event: Event) !void {
     };
     _ = c.SDL_RenderFillRectF(renderer, &rect);
 
-    try wv.eventRects.append(.{ .evid = event.id, .rect = rect });
+    try wv.eventRects.append(.{ .evid = draw_event.id, .rect = rect });
 
     arc.setColor(renderer, text_color);
-    text.drawText(renderer, event.name, x + 2, y + 2, .Left, .Top);
+    text.drawText(renderer, draw_event.name, x + 2, y + 2, .Left, .Top);
 }
 pub fn drawEvent(wv: *WeekView, event: Event, now: Date) !void {
-    const view_start = Date.now().getWeekStart();
-    const view_end = Date.now().getWeekStart().after(.{ .weeks = 1 });
+    _ = now; // TODO: Draw events greyed-out if they are already past
+    const view_start = wv.start;
+    const view_end = wv.start.after(.{ .weeks = 1 });
 
     if (event.repeat) |repeat| {
         var repeat_start = repeat.start;
-        // if the event starts after the week view, do nothing
-        if (now.after(.{ .weeks = 1 }).getWeekStart().isBefore(repeat_start))
+        // if the event starts repeating after the week view, do nothing
+        if (wv.start.after(.{ .weeks = 1 }).isBeforeEq(repeat_start))
             return;
-        // If the event starts before this week view, just start on sunday
-        if (repeat_start.isBefore(now.getWeekStart()))
-            repeat_start = now.getWeekStart();
+        // If the event starts repeating before this week view, just start on sunday
+        if (repeat_start.isBefore(wv.start))
+            repeat_start = wv.start;
 
         const repeat_end = if (repeat.end) |end| end else repeat_start.after(.{ .days = 8 });
 
