@@ -14,6 +14,7 @@ const Time = calendar.Time;
 const draw = @import("lib/draw.zig");
 const Renderer = draw.Renderer;
 const Surface = @import("lib/surface.zig").Surface;
+const WeekView = @import("lib/weekview.zig").WeekView;
 
 const Database = @import("cli/database.zig").Database;
 
@@ -99,12 +100,12 @@ pub fn main() !void {
     var events = try loadEvents(allocator, db);
     events = events;
 
-    var hours_surface = Surface.init(allocator, renderer, 0, 96, 64, scrn_h - 96);
-    var days_surface = Surface.init(allocator, renderer, 64, 0, scrn_w - 64, 96);
-    var week_surface = Surface.init(allocator, renderer, 64, 96, scrn_w - 64, scrn_h - 96);
+    var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
+    var days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
+    var weekview = WeekView.init(allocator, renderer, scrn_w, scrn_h);
     defer hours_surface.deinit();
     defer days_surface.deinit();
-    defer week_surface.deinit();
+    defer weekview.deinit();
 
     var dragging_event: ?*Event = null;
     var is_dragging_end = false; // Whether you are dragging the start of the event or the end
@@ -124,7 +125,7 @@ pub fn main() !void {
                     else => {},
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
-                    if (week_surface.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
+                    if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
                         for (events.items) |*e| {
                             if (e.id == er.evid) {
                                 std.debug.print("{}\n", .{er.evid});
@@ -142,16 +143,16 @@ pub fn main() !void {
                 },
                 c.SDL_MOUSEMOTION => {
                     if (dragging_event) |ev_ptr| {
-                        const x0 = week_surface.x;
-                        const y0 = week_surface.y;
+                        const x0 = weekview.sf.x;
+                        const y0 = weekview.sf.y;
                         const mx: f32 = @floatFromInt(ev.motion.x);
                         const my: f32 = @floatFromInt(ev.motion.y);
                         const oev = original_dragging_event.?;
-                        const new_day = draw.weekdayFromX(mx - x0, week_surface.w);
-                        const new_hr = draw.hourFromY(my - y0, week_surface.h);
+                        const new_day = draw.weekdayFromX(mx - x0, weekview.sf.w);
+                        const new_hr = draw.hourFromY(my - y0, weekview.sf.h);
 
-                        const old_day = draw.weekdayFromX(@as(f32, @floatFromInt(dragging_start_x)) - x0, week_surface.w);
-                        const old_hr = draw.hourFromY(@as(f32, @floatFromInt(dragging_start_y)) - y0, week_surface.h);
+                        const old_day = draw.weekdayFromX(@as(f32, @floatFromInt(dragging_start_x)) - x0, weekview.sf.w);
+                        const old_hr = draw.hourFromY(@as(f32, @floatFromInt(dragging_start_y)) - y0, weekview.sf.h);
 
                         const d_day: i32 = new_day - old_day;
                         var d_hr: f32 = new_hr - old_hr;
@@ -165,8 +166,8 @@ pub fn main() !void {
                             ev_ptr.start.setHourF(oev.start.getHourF() + d_hr);
                         }
                     } else {
-                        if (week_surface.getEventRectBelow(ev.motion.x, ev.motion.y)) |er| {
-                            is_dragging_end = week_surface.isHoveringEnd(ev.motion.x, ev.motion.y, er);
+                        if (weekview.getEventRectBelow(ev.motion.x, ev.motion.y)) |er| {
+                            is_dragging_end = weekview.isHoveringEnd(ev.motion.x, ev.motion.y, er);
                             c.SDL_SetCursor(if (is_dragging_end) sizens_cursor else hand_cursor);
                         } else {
                             c.SDL_SetCursor(normal_cursor);
@@ -179,13 +180,13 @@ pub fn main() !void {
 
         // Drawing
 
-        try draw.drawWeek(&week_surface, events.items, Date.now());
-        draw.drawHours(&hours_surface, Date.now());
-        draw.drawDays(&days_surface, Date.now());
+        try draw.drawWeek(&weekview, events.items, Date.now());
+        draw.drawHours(hours_surface, Date.now());
+        draw.drawDays(days_surface, Date.now());
 
         _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xEE, 0xFF, 0xFF);
         _ = c.SDL_RenderClear(renderer);
-        week_surface.draw();
+        weekview.sf.draw();
         days_surface.draw();
         hours_surface.draw();
 

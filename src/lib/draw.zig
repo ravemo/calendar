@@ -6,6 +6,7 @@ const DateIter = calendar.DateIter;
 const Weekday = calendar.Weekday;
 const Time = calendar.Time;
 const Surface = @import("surface.zig").Surface;
+const WeekView = @import("weekview.zig").WeekView;
 
 const text = @import("text.zig");
 const arc = @import("arc.zig");
@@ -45,8 +46,8 @@ pub fn hourFromY(y: f32, h: f32) f32 {
     return 24 * y / h;
 }
 
-pub fn drawSingleEvent(sf: *Surface, event: Event) !void {
-    const renderer = sf.renderer;
+pub fn drawSingleEvent(wv: *WeekView, event: Event) !void {
+    const renderer = wv.sf.renderer;
     // if the event crosses the day boundary, but does not end at midnight
     if (event.start.getDayStart().isBefore(event.getEnd().getDayStart()) and
         event.getEnd().getDayStart().secondsSince(event.getEnd()) != 0)
@@ -54,33 +55,33 @@ pub fn drawSingleEvent(sf: *Surface, event: Event) !void {
         const split = event.start.after(.{ .days = 1 }).getDayStart();
         var head = event;
         head.duration = split.timeSince(event.start);
-        try drawSingleEvent(sf, head);
+        try drawSingleEvent(wv, head);
 
         var tail = event;
         tail.start = split;
         tail.duration = tail.duration.sub(head.duration);
-        try drawSingleEvent(sf, tail);
+        try drawSingleEvent(wv, tail);
         return;
     }
     const h = event.duration.getHoursF();
 
-    const x = xFromWeekday(event.start.getWeekday(), sf.w) + 3;
-    const y = yFromHour(event.start.getHourF(), sf.h);
+    const x = xFromWeekday(event.start.getWeekday(), wv.sf.w) + 3;
+    const y = yFromHour(event.start.getHourF(), wv.sf.h);
     arc.setColor(renderer, event_color);
     const rect = c.SDL_FRect{
         .x = x,
         .y = y,
-        .w = sf.w / 7 - 6,
-        .h = h * sf.h / 24,
+        .w = wv.sf.w / 7 - 6,
+        .h = h * wv.sf.h / 24,
     };
     _ = c.SDL_RenderFillRectF(renderer, &rect);
 
-    try sf.eventRects.append(.{ .evid = event.id, .rect = rect });
+    try wv.eventRects.append(.{ .evid = event.id, .rect = rect });
 
     arc.setColor(renderer, text_color);
     text.drawText(renderer, event.name, x + 2, y + 2, .Left, .Top);
 }
-pub fn drawEvent(sf: *Surface, event: Event, now: Date) !void {
+pub fn drawEvent(wv: *WeekView, event: Event, now: Date) !void {
     const view_start = Date.now().getWeekStart();
     const view_end = Date.now().getWeekStart().after(.{ .weeks = 1 });
 
@@ -102,46 +103,47 @@ pub fn drawEvent(sf: *Surface, event: Event, now: Date) !void {
                     const e = event.atDay(i);
                     if (e.getEnd().isBefore(view_start)) continue;
                     if (view_end.isBefore(e.start)) continue;
-                    try drawSingleEvent(sf, e);
+                    try drawSingleEvent(wv, e);
                 }
             },
             .pattern => |p| {
-                if (p.sun) try drawSingleEvent(sf, event.atWeekday(.Sunday));
-                if (p.mon) try drawSingleEvent(sf, event.atWeekday(.Monday));
-                if (p.tue) try drawSingleEvent(sf, event.atWeekday(.Tuesday));
-                if (p.wed) try drawSingleEvent(sf, event.atWeekday(.Wednesday));
-                if (p.thu) try drawSingleEvent(sf, event.atWeekday(.Thursday));
-                if (p.fri) try drawSingleEvent(sf, event.atWeekday(.Friday));
-                if (p.sat) try drawSingleEvent(sf, event.atWeekday(.Saturday));
+                // TODO use arrays?
+                if (p.sun) try drawSingleEvent(wv, event.atWeekday(.Sunday));
+                if (p.mon) try drawSingleEvent(wv, event.atWeekday(.Monday));
+                if (p.tue) try drawSingleEvent(wv, event.atWeekday(.Tuesday));
+                if (p.wed) try drawSingleEvent(wv, event.atWeekday(.Wednesday));
+                if (p.thu) try drawSingleEvent(wv, event.atWeekday(.Thursday));
+                if (p.fri) try drawSingleEvent(wv, event.atWeekday(.Friday));
+                if (p.sat) try drawSingleEvent(wv, event.atWeekday(.Saturday));
             },
         }
     } else {
-        try drawSingleEvent(sf, event);
+        try drawSingleEvent(wv, event);
     }
 }
 
-pub fn drawWeek(sf: *Surface, events: []Event, now: Date) !void {
-    const renderer = sf.renderer;
-    _ = c.SDL_SetRenderTarget(renderer, sf.tex);
+pub fn drawWeek(wv: *WeekView, events: []Event, now: Date) !void {
+    const renderer = wv.sf.renderer;
+    _ = c.SDL_SetRenderTarget(renderer, wv.sf.tex);
     arc.setColor(renderer, background_color);
     _ = c.SDL_RenderClear(renderer);
-    sf.clearEventRects();
+    wv.clearEventRects();
 
-    drawGrid(sf.*);
+    drawGrid(wv.sf);
 
     arc.setColor(renderer, divider_color);
     for (0..7) |i| {
-        const x = xFromWeekday(@intCast(i), sf.w);
-        _ = c.SDL_RenderDrawLineF(renderer, x, 0, x, sf.h);
+        const x = xFromWeekday(@intCast(i), wv.sf.w);
+        _ = c.SDL_RenderDrawLineF(renderer, x, 0, x, wv.sf.h);
     }
 
     for (events) |e| {
-        try drawEvent(sf, e, now);
+        try drawEvent(wv, e, now);
     }
     _ = c.SDL_SetRenderTarget(renderer, null);
 }
 
-pub fn drawHours(sf: *Surface, now: Date) void {
+pub fn drawHours(sf: Surface, now: Date) void {
     _ = now;
 
     const renderer = sf.renderer;
@@ -149,7 +151,7 @@ pub fn drawHours(sf: *Surface, now: Date) void {
     _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
     _ = c.SDL_RenderClear(renderer);
 
-    drawGrid(sf.*);
+    drawGrid(sf);
 
     arc.setColor(renderer, text_color);
     const sep = sf.h / 24;
@@ -168,14 +170,14 @@ pub fn drawHours(sf: *Surface, now: Date) void {
     _ = c.SDL_SetRenderTarget(renderer, null);
 }
 
-pub fn drawDays(sf: *Surface, now: Date) void {
+pub fn drawDays(sf: Surface, now: Date) void {
     const renderer = sf.renderer;
     const weekdays = [_][:0]const u8{ "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday" };
     _ = c.SDL_SetRenderTarget(renderer, sf.tex);
     _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
     _ = c.SDL_RenderClear(renderer);
 
-    drawGrid(sf.*);
+    drawGrid(sf);
 
     arc.setColor(renderer, text_color);
     const start_day: usize = @intCast(now.getWeekStart().tm.tm_mday);

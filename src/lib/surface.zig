@@ -7,15 +7,6 @@ const c = @cImport({
 });
 pub const Renderer = ?*c.SDL_Renderer;
 
-pub const EventRect = struct {
-    evid: i32,
-    rect: c.SDL_FRect,
-    pub fn isInside(self: EventRect, x: f32, y: f32) bool {
-        return (self.rect.x <= x and self.rect.x + self.rect.w >= x and
-            self.rect.y <= y and self.rect.y + self.rect.h >= y);
-    }
-};
-
 pub const Surface = struct {
     const Self = @This();
     renderer: Renderer,
@@ -25,9 +16,7 @@ pub const Surface = struct {
     w: f32,
     h: f32,
 
-    eventRects: std.ArrayList(EventRect),
-
-    pub fn init(allocator: std.mem.Allocator, renderer: Renderer, x: f32, y: f32, w: f32, h: f32) Self {
+    pub fn init(renderer: Renderer, x: f32, y: f32, w: f32, h: f32) Self {
         return .{
             .renderer = renderer,
             .tex = c.SDL_CreateTexture(
@@ -41,32 +30,11 @@ pub const Surface = struct {
             .y = y,
             .w = w,
             .h = h,
-            .eventRects = std.ArrayList(EventRect).init(allocator),
         };
     }
 
     pub fn deinit(self: Self) void {
-        self.eventRects.deinit();
-    }
-
-    pub fn clearEventRects(self: *Self) void {
-        self.eventRects.clearRetainingCapacity();
-    }
-
-    pub fn getEventRectBelow(self: Self, x: i32, y: i32) ?EventRect {
-        const xf: f32 = @as(f32, @floatFromInt(x)) - self.x;
-        const yf: f32 = @as(f32, @floatFromInt(y)) - self.y;
-        for (self.eventRects.items) |e| {
-            if (e.isInside(xf, yf)) return e;
-        }
-        return null;
-    }
-
-    pub fn isHoveringEnd(self: Self, x: i32, y: i32, er: EventRect) bool {
-        // TODO Some EventRects don't have ends (those that wrap around midnight)
-        const xf: f32 = @as(f32, @floatFromInt(x)) - self.x;
-        const yf: f32 = @as(f32, @floatFromInt(y)) - self.y;
-        return er.isInside(xf, yf) and yf > er.rect.y + er.rect.h - 16;
+        c.SDL_DestroyTexture(self.tex);
     }
 
     pub fn getRect(self: Self) c.SDL_Rect {

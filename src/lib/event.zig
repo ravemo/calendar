@@ -260,7 +260,6 @@ pub const Date = struct {
             const v = part.val;
             const substring = try cap.getNamedMatch(name);
             if (substring) |substr| {
-                print("{s}: {s}\n", .{ name, substr });
                 switch (v) {
                     .Year => date.setYear(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
                     .Month => date.setMonth(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
