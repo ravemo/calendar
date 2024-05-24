@@ -31,18 +31,16 @@ pub fn main() !void {
     while (try ln.linenoiseZ("> ")) |input| {
         defer allocator.free(input);
 
-        const cmd_general = try commands.getCmd(allocator, input);
+        const cmd_general = try commands.initCmd(allocator, input);
+        defer cmd_general.deinit();
         switch (cmd_general) {
             .add => |cmd| {
                 try cmd.execute(allocator, db, &ln);
             },
-            .rm => |cmd| {
+            .quit => break,
+            inline else => |cmd| {
                 try cmd.execute(allocator, db);
             },
-            .view => |cmd| {
-                try cmd.execute(allocator, &db);
-            },
-            .quit => break,
         }
     }
 }

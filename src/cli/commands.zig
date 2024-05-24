@@ -53,10 +53,7 @@ const RmCmd = struct {
     const pattern = "rm (.*)";
     id: i32,
     fn init(cap: *Captures, _: std.mem.Allocator) !Self {
-        const id = std.fmt.parseInt(i32, cap.sliceAt(1).?, 10) catch |e| {
-            std.debug.print("Couldn't parse \"{s}\"\n", .{cap.sliceAt(1).?});
-            return e;
-        };
+        const id = try std.fmt.parseInt(i32, cap.sliceAt(1).?, 10);
         return .{ .id = id };
     }
     pub fn deinit(_: Self) void {}
@@ -89,7 +86,7 @@ const ViewCmd = struct {
         std.debug.print("---\n", .{});
         return 0;
     }
-    pub fn execute(_: Self, allocator: std.mem.Allocator, db: *Database) !void {
+    pub fn execute(_: Self, allocator: std.mem.Allocator, db: Database) !void {
         const query = try std.fmt.allocPrintZ(
             allocator,
             "SELECT * FROM Events;",
@@ -108,14 +105,45 @@ const QuitCmd = struct {
     }
     pub fn deinit(_: Self) void {}
 };
+const RenameCmd = struct {
+    const Self = @This();
+    const pattern = "rename (-?\\d+) (.*)";
+    id: i32,
+    new_name: []u8,
+    allocator: std.mem.Allocator,
+    fn init(cap: *Captures, allocator: std.mem.Allocator) !Self {
+        const id = try std.fmt.parseInt(i32, cap.sliceAt(1).?, 10);
+        const new_name = try allocator.dupe(u8, cap.sliceAt(2).?);
+        return .{ .id = id, .new_name = new_name, .allocator = allocator };
+    }
+    pub fn deinit(self: Self) void {
+        self.allocator.free(self.new_name);
+    }
+    pub fn execute(self: Self, allocator: std.mem.Allocator, db: Database) !void {
+        const query = try std.fmt.allocPrintZ(
+            allocator,
+            "UPDATE Events SET Name = '{s}' WHERE Id = {};",
+            .{ self.new_name, self.id },
+        );
+        defer allocator.free(query);
+        try db.execute(query);
+    }
+};
 const Cmd = union(enum) {
     add: AddCmd,
     rm: RmCmd,
     view: ViewCmd,
     quit: QuitCmd,
+    rename: RenameCmd,
+
+    pub fn deinit(self: Cmd) void {
+        switch (self) {
+            inline else => |cmd| cmd.deinit(),
+        }
+    }
 };
 
-pub fn getCmd(allocator: std.mem.Allocator, str: [:0]const u8) !Cmd {
+pub fn initCmd(allocator: std.mem.Allocator, str: [:0]const u8) !Cmd {
     inline for (std.meta.fields(Cmd)) |field| {
         const T = field.type;
         var regex = try Regex.compile(T.pattern);
