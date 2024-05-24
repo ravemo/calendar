@@ -251,6 +251,7 @@ pub const Date = struct {
                     .Hours => date.setHours(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
                     .Minutes => date.setMinutes(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
                 }
+                date.update();
                 cap.deinitMatch(substr);
             }
         }
@@ -287,6 +288,9 @@ pub const Date = struct {
         new_tm.tm_sec = 0;
         _ = c.mktime(&new_tm);
         return .{ .tm = new_tm };
+    }
+    pub fn getDay(self: Self) i32 {
+        return self.tm.tm_mday;
     }
     pub fn getHourF(self: Self) f32 {
         return @as(f32, @floatFromInt(self.tm.tm_hour)) +
@@ -341,7 +345,7 @@ pub const Date = struct {
         self.tm.tm_year = year - 1900;
     }
     pub fn setMonth(self: *Self, month: i32) void {
-        self.tm.tm_mon = month;
+        self.tm.tm_mon = month - 1;
     }
     pub fn setDay(self: *Self, mday: i32) void {
         self.tm.tm_mday = mday;
@@ -352,8 +356,17 @@ pub const Date = struct {
     pub fn setHours(self: *Self, hour: i32) void {
         self.tm.tm_hour = hour;
     }
+    pub fn setHourF(self: *Self, hour: f32) void {
+        self.tm.tm_hour = @intFromFloat(@floor(hour));
+        self.tm.tm_min = @intFromFloat(@mod(hour, 1));
+        _ = c.mktime(&self.tm);
+    }
     pub fn setMinutes(self: *Self, minute: i32) void {
         self.tm.tm_min = minute;
+    }
+
+    pub fn update(self: *Self) void {
+        _ = c.mktime(&self.tm);
     }
 
     // TODO
@@ -496,15 +509,17 @@ pub const RepeatInfo = struct {
 };
 pub const Event = struct {
     const Self = @This();
+    id: i32,
     name: []const u8,
     start: Date,
     end: Deadline,
     // either nothing, a date or the start_time offset by some duration.
     repeat: ?RepeatInfo,
 
-    pub fn init(allocator: anytype, name: []const u8, start: Date, end: Deadline, repeat: ?RepeatInfo) !Self {
+    pub fn init(allocator: anytype, id: i32, name: []const u8, start: Date, end: Deadline, repeat: ?RepeatInfo) !Self {
         _ = allocator;
         return .{
+            .id = id,
             .name = name,
             .start = start,
             .end = end,
