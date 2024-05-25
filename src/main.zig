@@ -191,6 +191,9 @@ pub fn main() !void {
                         if (is_dragging_end) {
                             d_hr = d_hr + @as(f32, @floatFromInt(d_day)) * 24;
                             ev_ptr.duration = oev.duration.add(Time.initHF(d_hr));
+                            if (ev_ptr.duration.shorterThan(.{ .minutes = 30 })) {
+                                ev_ptr.duration = .{ .minutes = 30 };
+                            }
                         } else { // if dragging the end point of the event
                             ev_ptr.start.setDay(oev.start.getDay() + d_day);
                             ev_ptr.start.setHourF(oev.start.getHourF() + d_hr);

@@ -135,6 +135,11 @@ pub const Time = struct {
         const other_seconds = other.getSeconds();
         return (Time{ .seconds = self_seconds - other_seconds }).toReadable();
     }
+    pub fn shorterThan(self: Self, other: Self) bool {
+        const self_seconds = self.getSeconds();
+        const other_seconds = other.getSeconds();
+        return self_seconds < other_seconds;
+    }
 };
 
 pub const DateIter = struct {
