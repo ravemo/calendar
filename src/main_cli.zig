@@ -11,9 +11,8 @@ pub fn main() !void {
         \\CREATE TABLE IF NOT EXISTS Repeats (
         \\    Id INTEGER PRIMARY KEY,
         \\    Period TEXT NOT NULL,
-        \\    Start TEXT NOT NULL,
-        \\    End TEXT,
-        \\    Data BLOB
+        \\    Start TEXT,
+        \\    End TEXT
         \\);
         \\CREATE TABLE IF NOT EXISTS Events (
         \\    Id INTEGER PRIMARY KEY,

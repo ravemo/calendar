@@ -25,16 +25,9 @@ pub const Database = struct {
     }
 
     pub fn execute(self: Self, query: [:0]const u8) !void {
-        print("Running query: \"{s}\"\n", .{query});
-        var errmsg: [*c]u8 = undefined;
-        if (c.SQLITE_OK != c.sqlite3_exec(self.db, query, null, null, &errmsg)) {
-            defer c.sqlite3_free(errmsg);
-            std.debug.print("Exec query failed: {s}\n", .{errmsg});
-            return error.execError;
-        }
-        return;
+        return executeCB(self, query, null, null);
     }
-    pub fn executeCB(self: Self, query: [:0]const u8, cb: QueryCallback, userdata: ?*anyopaque) !void {
+    pub fn executeCB(self: Self, query: [:0]const u8, cb: ?*const QueryCallback, userdata: ?*anyopaque) !void {
         print("Running query: \"{s}\"\n", .{query});
         var errmsg: [*c]u8 = undefined;
         if (c.SQLITE_OK != c.sqlite3_exec(self.db, query, cb, userdata, &errmsg)) {
@@ -59,5 +52,9 @@ pub const Database = struct {
     }
     pub fn finalizeFetch(self: Self) void {
         c.sqlite3_finalize(self.res);
+    }
+
+    pub fn getLastInsertedRowid(self: Self) i32 {
+        return @intCast(c.sqlite3_last_insert_rowid(self.db));
     }
 };

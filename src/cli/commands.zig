@@ -8,6 +8,7 @@ const Database = @import("database.zig").Database;
 
 const calendar = @import("../lib/event.zig");
 const StringError = calendar.StringError;
+const RepeatInfo = calendar.RepeatInfo;
 const Date = calendar.Date;
 
 const AddCmd = struct {
@@ -105,6 +106,7 @@ const QuitCmd = struct {
     }
     pub fn deinit(_: Self) void {}
 };
+
 const RenameCmd = struct {
     const Self = @This();
     const pattern = "rename (-?\\d+) (.*)";
@@ -129,12 +131,67 @@ const RenameCmd = struct {
         try db.execute(query);
     }
 };
+
+const RepeatCmd = struct {
+    const Self = @This();
+    const pattern = "repeat (-?\\d+) (.*)";
+    id: i32,
+    repeat_info: RepeatInfo,
+    fn init(cap: *Captures, _: std.mem.Allocator) !Self {
+        const id = try std.fmt.parseInt(i32, cap.sliceAt(1).?, 10);
+        const repeat_info = try RepeatInfo.fromString(cap.sliceAt(2).?);
+        return .{ .id = id, .repeat_info = repeat_info };
+    }
+    pub fn deinit(_: Self) void {}
+    pub fn execute(self: Self, allocator: std.mem.Allocator, db: Database) !void {
+        const period = try self.repeat_info.period.toString(allocator);
+        defer allocator.free(period);
+        const start_def = if (self.repeat_info.start) |s| try s.toString(allocator) else null;
+        defer if (start_def) |s| allocator.free(s);
+        const end_def = if (self.repeat_info.end) |e| try e.toString(allocator) else null;
+        defer if (end_def) |s| allocator.free(s);
+
+        // TODO use parametrized query instead of having this spaghetti
+        const start = if (start_def) |s|
+            try std.fmt.allocPrintZ(allocator, "'{s}'", .{s})
+        else
+            "NULL";
+        defer if (!std.mem.eql(u8, start, "NULL"))
+            allocator.free(start);
+
+        const end = if (end_def) |s|
+            try std.fmt.allocPrintZ(allocator, "'{s}'", .{s})
+        else
+            "NULL";
+        defer if (!std.mem.eql(u8, end, "NULL"))
+            allocator.free(end);
+
+        const create_repeat_query = try std.fmt.allocPrintZ(
+            allocator,
+            "INSERT INTO Repeats(Period, Start, End) VALUES('{s}', {s}, {s})",
+            .{ period, start, end },
+        );
+        defer allocator.free(create_repeat_query);
+        try db.execute(create_repeat_query);
+
+        const set_repeat_query = try std.fmt.allocPrintZ(
+            allocator,
+            "UPDATE Events SET Repeat = {} WHERE Id = {};",
+            .{ db.getLastInsertedRowid(), self.id },
+        );
+        defer allocator.free(set_repeat_query);
+
+        try db.execute(set_repeat_query);
+    }
+};
+
 const Cmd = union(enum) {
     add: AddCmd,
     rm: RmCmd,
     view: ViewCmd,
     quit: QuitCmd,
     rename: RenameCmd,
+    repeat: RepeatCmd,
 
     pub fn deinit(self: Cmd) void {
         switch (self) {
