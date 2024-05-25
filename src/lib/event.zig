@@ -253,6 +253,7 @@ pub const Date = struct {
             const v = part.val;
             const substring = try cap.getNamedMatch(name);
             if (substring) |substr| {
+                print("{s}: {s}\n", .{ name, substr });
                 switch (v) {
                     .Year => date.setYear(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
                     .Month => date.setMonth(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
@@ -267,11 +268,20 @@ pub const Date = struct {
         return date;
     }
 
+    pub fn toStringZ(self: Self, allocator: std.mem.Allocator) ![:0]const u8 {
+        return std.fmt.allocPrintZ(allocator, "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}", .{
+            @as(u32, @intCast(self.tm.tm_year + 1900)),
+            @as(u32, @intCast(self.tm.tm_mon + 1)),
+            @as(u32, @intCast(self.tm.tm_mday)),
+            @as(u32, @intCast(self.tm.tm_hour)),
+            @as(u32, @intCast(self.tm.tm_min)),
+        });
+    }
     pub fn toString(self: Self, allocator: std.mem.Allocator) ![]const u8 {
         return std.fmt.allocPrint(allocator, "{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}", .{
             @as(u32, @intCast(self.tm.tm_year + 1900)),
             @as(u32, @intCast(self.tm.tm_mon + 1)),
-            @as(u32, @intCast(self.tm.tm_mday + 1)),
+            @as(u32, @intCast(self.tm.tm_mday)),
             @as(u32, @intCast(self.tm.tm_hour)),
             @as(u32, @intCast(self.tm.tm_min)),
         });

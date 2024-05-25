@@ -114,7 +114,7 @@ pub fn main() !void {
     const hand_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_HAND);
     const sizens_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_SIZENS);
 
-    const db = try Database.init("calendar.db");
+    var db = try Database.init("calendar.db");
     var events = try loadEvents(allocator, db);
     events = events;
 
@@ -165,7 +165,10 @@ pub fn main() !void {
                     }
                 },
                 c.SDL_MOUSEBUTTONUP => {
-                    dragging_event = null;
+                    if (dragging_event) |e_ptr| {
+                        try db.updateEvent(allocator, e_ptr.*);
+                        dragging_event = null;
+                    }
                 },
                 c.SDL_MOUSEMOTION => {
                     if (dragging_event) |ev_ptr| {
