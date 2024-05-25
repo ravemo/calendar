@@ -21,14 +21,18 @@ const Database = @import("cli/database.zig").Database;
 const scrn_w = 800;
 const scrn_h = 600;
 
-fn callback(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*c]u8) callconv(.C) c_int {
+fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*c]u8) callconv(.C) c_int {
     const events: *std.ArrayList(Event) = @alignCast(@ptrCast(events_ptr));
     const allocator = events.allocator;
     var id: i32 = undefined;
     var name: []const u8 = undefined;
     var start: Date = undefined;
-    var end: calendar.Date = undefined;
+    var end: Date = undefined;
+    var has_repeat = false;
+    var r_start: ?Date = null;
+    var r_end: ?Date = null;
     var repeat: ?calendar.RepeatInfo = null;
+    repeat = repeat;
 
     for (0..@intCast(argc)) |i| {
         const col = std.mem.span(cols[i]);
@@ -37,15 +41,29 @@ fn callback(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*
             id = std.fmt.parseInt(i32, val.?, 10) catch return -1;
         } else if (std.mem.eql(u8, col, "Name")) {
             name = allocator.dupe(u8, val.?) catch return -1;
-        } else if (std.mem.eql(u8, col, "Start")) {
+        } else if (std.mem.eql(u8, col, "E_Start")) {
             start = Date.fromString(val.?) catch return -1;
-        } else if (std.mem.eql(u8, col, "End")) {
+        } else if (std.mem.eql(u8, col, "E_End")) {
             end = calendar.Date.fromString(val.?) catch return -1;
         } else if (std.mem.eql(u8, col, "Repeat")) {
+            if (val != null) has_repeat = true;
+        } else if (std.mem.eql(u8, col, "R_Start")) {
             if (val) |v| {
-                repeat = calendar.RepeatInfo.fromString(v) catch return -1;
+                r_start = Date.fromString(v) catch return -1;
             }
+        } else if (std.mem.eql(u8, col, "R_End")) {
+            if (val) |v|
+                r_end = Date.fromString(v) catch return -1;
+        } else if (std.mem.eql(u8, col, "Period")) {
+            if (val) |v|
+                repeat = .{ .period = calendar.Period.fromString(v) catch return -1 };
         }
+    }
+
+    if (has_repeat) std.debug.assert(repeat != null);
+    if (repeat) |*r| {
+        r.start = r_start;
+        r.end = r_end;
     }
     events.append(Event.init(allocator, id, name, start, end.timeSince(start), repeat) catch return -1) catch return -1;
     std.debug.print("Loaded {} events.\n", .{events.items.len});
@@ -54,14 +72,14 @@ fn callback(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*
 
 fn loadEvents(allocator: std.mem.Allocator, db: Database) !std.ArrayList(Event) {
     var events = std.ArrayList(Event).init(allocator);
-    const query = try std.fmt.allocPrintZ(
-        allocator,
-        "SELECT * FROM Events;",
-        .{},
-    );
+    const query = try std.fmt.allocPrintZ(allocator,
+        \\ SELECT Events.Start as E_Start, Events.End as E_End,
+        \\        Repeats.Start as R_Start, Repeats.End as R_End, *
+        \\ FROM Events LEFT JOIN Repeats ON Events.Repeat = Repeats.Id;
+    , .{});
     defer allocator.free(query);
 
-    try db.executeCB(query, callback, &events);
+    try db.executeCB(query, load_event_cb, &events);
     return events;
 }
 

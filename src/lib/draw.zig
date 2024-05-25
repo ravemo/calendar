@@ -101,15 +101,28 @@ pub fn drawEvent(wv: *WeekView, event: Event, now: Date) !void {
     const view_end = wv.start.after(.{ .weeks = 1 });
 
     if (event.repeat) |repeat| {
-        var repeat_start = repeat.start;
+        const repeat_start = if (repeat.start) |start|
+            // If the event starts repeating before this week view, just start on sunday
+            if (start.isBefore(wv.start))
+                wv.start
+            else
+                start
+        else
+            view_start;
+
         // if the event starts repeating after the week view, do nothing
         if (wv.start.after(.{ .weeks = 1 }).isBeforeEq(repeat_start))
             return;
-        // If the event starts repeating before this week view, just start on sunday
-        if (repeat_start.isBefore(wv.start))
-            repeat_start = wv.start;
 
-        const repeat_end = if (repeat.end) |end| end else repeat_start.after(.{ .days = 8 });
+        const repeat_end = blk: {
+            if (repeat.end) |end| {
+                break :blk end;
+            } else if (repeat.start) |start| {
+                break :blk start.after(.{ .days = 8 });
+            } else {
+                break :blk view_end;
+            }
+        };
 
         switch (repeat.period) {
             .time => |t| {

@@ -9,7 +9,7 @@ const Regex = regex.Regex;
 const print = std.debug.print;
 
 pub const StringError = error{
-    InvalidFormat,
+    ConversionError,
     RegexError,
     NoMatches,
 };
@@ -33,7 +33,11 @@ pub const Time = struct {
     }
 
     pub fn fromString(str: [:0]const u8) StringError!Self {
-        const pattern = "(?'weeks'\\d) weeks, (?'days'\\d) days, (?'hours'\\d) hours, (?'minutes'\\d) minutes, (?'seconds'\\d) seconds";
+        const pattern = "(?:(?'weeks'\\d+) weeks?(?:, )?)?" ++
+            "(?:(?'days'\\d+) d(?:ay)?s?(?:, )?)?" ++
+            "(?:(?'hours'\\d+) h(?:our)?s?(?:, )?)?" ++
+            "(?:(?'minutes'\\d+) m(?:inute)?s?(?:, )?)?" ++
+            "(?:(?'seconds'\\d+) s(?:econd)?s?)?";
 
         const re = try Regex.compile(pattern);
         defer re.deinit();
@@ -61,7 +65,7 @@ pub const Time = struct {
             const substring = try cap.getNamedMatch(name);
             defer cap.deinitMatch(substring);
             const int_val = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch {
-                return StringError.InvalidFormat;
+                return StringError.ConversionError;
             } else 0;
             switch (v) {
                 .Weeks => time.weeks = int_val,
@@ -250,11 +254,11 @@ pub const Date = struct {
             const substring = try cap.getNamedMatch(name);
             if (substring) |substr| {
                 switch (v) {
-                    .Year => date.setYear(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
-                    .Month => date.setMonth(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
-                    .Day => date.setDay(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
-                    .Hours => date.setHours(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
-                    .Minutes => date.setMinutes(std.fmt.parseInt(i32, substr, 10) catch return StringError.InvalidFormat),
+                    .Year => date.setYear(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
+                    .Month => date.setMonth(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
+                    .Day => date.setDay(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
+                    .Hours => date.setHours(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
+                    .Minutes => date.setMinutes(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
                 }
                 date.update();
                 cap.deinitMatch(substr);
@@ -403,7 +407,7 @@ pub const Pattern = struct {
         for (1..8) |i| {
             const substr = cap.sliceAt(i).?;
             defer cap.deinitMatch(substr);
-            const v = std.fmt.parseInt(i1, substr, 10) catch return StringError.InvalidFormat;
+            const v = std.fmt.parseInt(i1, substr, 10) catch return StringError.ConversionError;
             switch (i) {
                 1 => p.sun = (v == 1),
                 2 => p.mon = (v == 1),
@@ -436,7 +440,7 @@ pub const Period = union(enum) {
     pub fn fromString(str: [:0]const u8) StringError!Period {
         const v = Pattern.fromString(str) catch |e| {
             switch (e) {
-                StringError.InvalidFormat => return .{ .time = try Time.fromString(str) },
+                StringError.NoMatches => return .{ .time = try Time.fromString(str) },
                 else => return e,
             }
         };
@@ -451,10 +455,10 @@ pub const Period = union(enum) {
 pub const RepeatInfo = struct {
     const Self = @This();
     period: Period,
-    start: Date,
+    start: ?Date = null,
     end: ?Date = null,
     pub fn fromString(str: [:0]const u8) StringError!RepeatInfo {
-        const pattern = "(?'period_str'.*)\n(?'start_str'.*)\n(?'end_str'.*)";
+        const pattern = "every (?'period'.*),?(?: from (?'start'.*))?,?(?: until (?'end'.*))?";
 
         const re = try Regex.compile(pattern);
         defer re.deinit();
@@ -479,7 +483,7 @@ pub const RepeatInfo = struct {
             defer cap.deinitMatch(substring);
             switch (v) {
                 .Period => info.period = try Period.fromString(substring.?),
-                .Start => info.start = try Date.fromString(substring.?),
+                .Start => info.start = if (substring) |substr| try Date.fromString(substr) else null,
                 .End => info.end = if (substring) |substr| try Date.fromString(substr) else null,
             }
         }
