@@ -57,8 +57,6 @@ const RmCmd = struct {
         const id = try std.fmt.parseInt(i32, cap.sliceAt(1).?, 10);
         return .{ .id = id };
     }
-    pub fn deinit(_: Self) void {}
-
     pub fn execute(self: Self, allocator: std.mem.Allocator, db: Database) !void {
         const query = try std.fmt.allocPrintZ(
             allocator,
@@ -72,10 +70,6 @@ const RmCmd = struct {
 const ViewCmd = struct {
     const Self = @This();
     const pattern = "list";
-    fn init(_: *Captures, _: std.mem.Allocator) !Self {
-        return .{};
-    }
-    pub fn deinit(_: Self) void {}
     fn callback(_: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*c]u8) callconv(.C) c_int {
         for (0..@intCast(argc)) |i| {
             if (argv[i] == null) {
@@ -101,10 +95,6 @@ const ViewCmd = struct {
 const QuitCmd = struct {
     const Self = @This();
     const pattern = "quit";
-    fn init(_: *Captures, _: std.mem.Allocator) !Self {
-        return .{};
-    }
-    pub fn deinit(_: Self) void {}
 };
 
 const RenameCmd = struct {
@@ -142,7 +132,6 @@ const RepeatCmd = struct {
         const repeat_info = try RepeatInfo.fromString(cap.sliceAt(2).?);
         return .{ .id = id, .repeat_info = repeat_info };
     }
-    pub fn deinit(_: Self) void {}
     pub fn execute(self: Self, allocator: std.mem.Allocator, db: Database) !void {
         const period = try self.repeat_info.period.toString(allocator);
         defer allocator.free(period);
@@ -195,6 +184,7 @@ const Cmd = union(enum) {
 
     pub fn deinit(self: Cmd) void {
         switch (self) {
+            .rm, .quit, .view, .repeat => {},
             inline else => |cmd| cmd.deinit(),
         }
     }
@@ -209,8 +199,12 @@ pub fn initCmd(allocator: std.mem.Allocator, str: [:0]const u8) !Cmd {
             StringError.NoMatches => null,
             else => return e,
         };
-        if (cap_opt) |*cap|
-            return @unionInit(Cmd, field.name, try T.init(cap, allocator));
+        if (cap_opt) |*cap| {
+            return switch (T) {
+                QuitCmd, ViewCmd => @unionInit(Cmd, field.name, .{}),
+                inline else => |_| @unionInit(Cmd, field.name, try T.init(cap, allocator)),
+            };
+        }
     }
     return error.NoMatch;
 }
