@@ -37,7 +37,7 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
     for (0..@intCast(argc)) |i| {
         const col = std.mem.span(cols[i]);
         const val = if (argv[i]) |v| std.mem.span(v) else null;
-        if (std.mem.eql(u8, col, "Id")) {
+        if (std.mem.eql(u8, col, "E_Id")) {
             id = std.fmt.parseInt(i32, val.?, 10) catch return -1;
         } else if (std.mem.eql(u8, col, "Name")) {
             name = allocator.dupe(u8, val.?) catch return -1;
@@ -73,7 +73,8 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
 fn loadEvents(allocator: std.mem.Allocator, db: Database) !std.ArrayList(Event) {
     var events = std.ArrayList(Event).init(allocator);
     const query = try std.fmt.allocPrintZ(allocator,
-        \\ SELECT Events.Start as E_Start, Events.End as E_End,
+        \\ SELECT Events.Id as E_Id, Repeats.Id as R_Id,
+        \\        Events.Start as E_Start, Events.End as E_End,
         \\        Repeats.Start as R_Start, Repeats.End as R_End, *
         \\ FROM Events LEFT JOIN Repeats ON Events.Repeat = Repeats.Id;
     , .{});

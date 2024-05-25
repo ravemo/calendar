@@ -53,7 +53,7 @@ const RmCmd = struct {
     const Self = @This();
     const pattern = "rm (.*)";
     id: i32,
-    fn init(cap: *Captures, _: std.mem.Allocator) !Self {
+    fn init(cap: *Captures) !Self {
         const id = try std.fmt.parseInt(i32, cap.sliceAt(1).?, 10);
         return .{ .id = id };
     }
@@ -127,7 +127,7 @@ const RepeatCmd = struct {
     const pattern = "repeat (-?\\d+) (.*)";
     id: i32,
     repeat_info: RepeatInfo,
-    fn init(cap: *Captures, _: std.mem.Allocator) !Self {
+    fn init(cap: *Captures) !Self {
         const id = try std.fmt.parseInt(i32, cap.sliceAt(1).?, 10);
         const repeat_info = try RepeatInfo.fromString(cap.sliceAt(2).?);
         return .{ .id = id, .repeat_info = repeat_info };
@@ -174,6 +174,25 @@ const RepeatCmd = struct {
     }
 };
 
+const DupeCmd = struct {
+    const Self = @This();
+    const pattern = "dupe (-?\\d+)";
+    id: i32,
+    fn init(cap: *Captures) !Self {
+        return .{ .id = try std.fmt.parseInt(i32, cap.sliceAt(1).?, 10) };
+    }
+    pub fn execute(self: Self, allocator: std.mem.Allocator, db: Database) !void {
+        const query = try std.fmt.allocPrintZ(allocator,
+            \\ CREATE TEMPORARY TABLE tmp AS SELECT * FROM Events WHERE Id == {};
+            \\ UPDATE tmp SET Id = NULL;
+            \\ INSERT INTO Events SELECT * FROM tmp;
+            \\ DROP TABLE tmp;
+        , .{self.id});
+        defer allocator.free(query);
+        try db.execute(query);
+    }
+};
+
 const Cmd = union(enum) {
     add: AddCmd,
     rm: RmCmd,
@@ -181,10 +200,20 @@ const Cmd = union(enum) {
     quit: QuitCmd,
     rename: RenameCmd,
     repeat: RepeatCmd,
+    dupe: DupeCmd,
+
+    pub fn init(allocator: std.mem.Allocator, field: std.builtin.Type.UnionField, cap: *Captures) !Cmd {
+        const T = field.type;
+        return switch (T) {
+            QuitCmd, ViewCmd => @unionInit(Cmd, field.name, .{}),
+            DupeCmd, RmCmd, RepeatCmd => @unionInit(Cmd, field.name, try T.init(cap)),
+            inline else => |_| @unionInit(Cmd, field.name, try T.init(cap, allocator)),
+        };
+    }
 
     pub fn deinit(self: Cmd) void {
         switch (self) {
-            .rm, .quit, .view, .repeat => {},
+            .rm, .quit, .view, .repeat, .dupe => {},
             inline else => |cmd| cmd.deinit(),
         }
     }
@@ -200,10 +229,7 @@ pub fn initCmd(allocator: std.mem.Allocator, str: [:0]const u8) !Cmd {
             else => return e,
         };
         if (cap_opt) |*cap| {
-            return switch (T) {
-                QuitCmd, ViewCmd => @unionInit(Cmd, field.name, .{}),
-                inline else => |_| @unionInit(Cmd, field.name, try T.init(cap, allocator)),
-            };
+            return try Cmd.init(allocator, field, cap);
         }
     }
     return error.NoMatch;
