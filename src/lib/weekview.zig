@@ -11,7 +11,6 @@ pub const EventRect = struct {
     evid: i32,
     rect: c.SDL_FRect,
     pub fn isInside(self: EventRect, x: f32, y: f32) bool {
-        //std.debug.print("{}: ({}, {}), {} x {}\n", .{ self.evid, self.rect.x, self.rect.y, self.rect.w, self.rect.h });
         return (self.rect.x <= x and self.rect.x + self.rect.w >= x and
             self.rect.y <= y and self.rect.y + self.rect.h >= y);
     }
@@ -41,7 +40,6 @@ pub const WeekView = struct {
         const xf: f32 = @as(f32, @floatFromInt(x)) - self.sf.x;
         const yf: f32 = @as(f32, @floatFromInt(y)) - self.sf.y;
         for (self.eventRects.items) |e| {
-            //std.debug.print("??? Id: {}\n", .{e.evid});
             if (e.isInside(xf, yf)) return e;
         }
         return null;
@@ -51,7 +49,7 @@ pub const WeekView = struct {
         // TODO Some EventRects don't have ends (those that wrap around midnight)
         const xf: f32 = @as(f32, @floatFromInt(x)) - self.sf.x;
         const yf: f32 = @as(f32, @floatFromInt(y)) - self.sf.y;
-        return er.isInside(xf, yf) and yf > er.rect.y + er.rect.h - 16;
+        return er.isInside(xf, yf) and yf > er.rect.y + er.rect.h - 8;
     }
 
     pub fn getEnd(self: Self) Date {

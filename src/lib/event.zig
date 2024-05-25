@@ -349,11 +349,11 @@ pub const Date = struct {
 
     pub fn after(self: Self, offset: Time) Self {
         var new_tm = self.tm;
-        new_tm.tm_min = new_tm.tm_sec + offset.seconds;
-        new_tm.tm_min = new_tm.tm_min + offset.minutes;
-        new_tm.tm_hour = new_tm.tm_hour + offset.hours;
-        new_tm.tm_mday = new_tm.tm_mday + offset.days;
-        new_tm.tm_mday = new_tm.tm_mday + offset.weeks * 7;
+        new_tm.tm_sec += offset.seconds;
+        new_tm.tm_min += offset.minutes;
+        new_tm.tm_hour += offset.hours;
+        new_tm.tm_mday += offset.days;
+        new_tm.tm_mday += offset.weeks * 7;
         _ = c.mktime(&new_tm);
         return .{ .tm = new_tm };
     }
@@ -381,7 +381,7 @@ pub const Date = struct {
     }
     pub fn setHourF(self: *Self, hour: f32) void {
         self.tm.tm_hour = @intFromFloat(@floor(hour));
-        self.tm.tm_min = @intFromFloat(@mod(hour, 1));
+        self.tm.tm_min = @intFromFloat(@mod(hour, 1.0) * 60);
         _ = c.mktime(&self.tm);
     }
     pub fn setMinutes(self: *Self, minute: i32) void {
