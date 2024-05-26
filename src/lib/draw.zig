@@ -258,11 +258,11 @@ pub fn drawDays(sf: Surface, now: Date) void {
     _ = c.SDL_RenderClear(renderer);
 
     arc.setColor(renderer, text_color);
-    const start_day: usize = @intCast(now.getWeekStart().tm.tm_mday);
     for (0..7, weekdays) |i, weekday| {
+        const cur_day = now.getWeekStart().after(.{ .days = @intCast(i) });
         const x: f32 = sf.w * @as(f32, @floatFromInt(i)) / 7;
         var buf: [2:0]u8 = undefined;
-        _ = std.fmt.formatIntBuf(&buf, start_day + i, 10, .lower, .{});
+        _ = std.fmt.formatIntBuf(&buf, cur_day.getDay(), 10, .lower, .{});
         text.drawText(renderer, weekday, x + sf.w / 14, sf.h / 3, .Center, .Center);
         text.drawText(renderer, &buf, x + sf.w / 14, 2 * sf.h / 3, .Center, .Center);
     }
