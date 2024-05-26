@@ -156,32 +156,33 @@ pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
     const renderer = wv.sf.renderer;
     // TODO: Split if the event crosses the day boundary
 
+    if (task.scheduled_start == null) return;
+
     var draw_task = task;
-    var draw_start = task.scheduled_start;
+    var draw_start = &(draw_task.scheduled_start.?);
     // if task starts after end of current view or ends before start of current
     // view, don't even draw it
-    if (wv.getEnd().isBeforeEq(draw_start) or
-        draw_task.getEnd().isBeforeEq(wv.start))
+    if (wv.getEnd().isBeforeEq(draw_start.*) or
+        draw_task.getEnd().?.isBeforeEq(wv.start))
         return;
     // If task starts before current view, set start to start of current view
     if (draw_start.isBefore(wv.start))
-        draw_start = wv.start;
+        draw_start.* = wv.start;
     // If task end after current view, set end to end of current view
-    if (wv.getEnd().isBefore(draw_task.getEnd()))
-        draw_task.time = wv.getEnd().timeSince(draw_start);
-    draw_task.scheduled_start = draw_start;
+    if (wv.getEnd().isBefore(draw_task.getEnd().?))
+        draw_task.time = wv.getEnd().timeSince(draw_start.*);
     // TODO: Check if task is visible inside week view
 
     const h = draw_task.time.getHoursF();
 
-    const x = xFromWeekday(draw_task.scheduled_start.getWeekday(), wv.sf.w) + 3;
-    const y = yFromHour(draw_task.scheduled_start.getHourF(), wv.sf.h);
+    const x = xFromWeekday(draw_start.getWeekday(), wv.sf.w) + 3;
+    const y = yFromHour(draw_start.getHourF(), wv.sf.h);
     arc.setColor(renderer, task_color);
     const rect = c.SDL_FRect{
         .x = x,
-        .y = y,
+        .y = y + 1,
         .w = wv.sf.w / 7 - 6,
-        .h = h * wv.sf.h / 24,
+        .h = h * wv.sf.h / 24 - 1,
     };
     _ = c.SDL_RenderFillRectF(renderer, &rect);
 

@@ -95,7 +95,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
             if (val) |v|
                 due = calendar.Date.fromString(v) catch return -1;
         } else if (std.mem.eql(u8, col, "time")) {
-            time = .{ .seconds = if (val) |v| std.fmt.parseInt(i32, v, 10) catch return -1 else 2 * 60 };
+            time = .{ .seconds = if (val) |v| std.fmt.parseInt(i32, v, 10) catch return -1 else 2 * 60 * 60 };
         } else if (std.mem.eql(u8, col, "status")) {
             if (val != null) return 0; // We don't care about finished tasks for now
         } else {
@@ -109,7 +109,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
         .time = time,
         .start = start,
         .due = due,
-        .scheduled_start = start orelse Date.now(),
+        .scheduled_start = null,
     }) catch return -1;
     return 0;
 }
@@ -176,16 +176,8 @@ pub fn main() !void {
     // TODO: Use proper user_data_dir-like function when releasing to the public
     const tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
     const events = try loadEvents(allocator, events_db);
-    var tasks = try loadTasks(allocator, tasks_db);
-    try tasks.append(.{
-        .id = 1,
-        .name = "Test",
-        .start = Date.now(),
-        .due = Date.now().after(.{ .weeks = 5 }),
-        .time = .{ .hours = 2 },
-        .scheduled_start = Date.now(),
-    });
-    task.scheduleTasks(tasks.items, events.items);
+    const tasks = try loadTasks(allocator, tasks_db);
+    try task.scheduleTasks(allocator, tasks.items, events.items);
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
     var days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
