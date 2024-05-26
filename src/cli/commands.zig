@@ -4,7 +4,7 @@ const Regex = regexImport.Regex;
 const Captures = regexImport.Captures;
 const Linenoise = @import("linenoise").Linenoise;
 
-const Database = @import("database.zig").Database;
+const Database = @import("../lib/database.zig").Database;
 
 const calendar = @import("../lib/event.zig");
 const StringError = calendar.StringError;

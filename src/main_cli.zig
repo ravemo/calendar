@@ -1,6 +1,6 @@
 const std = @import("std");
 const commands = @import("cli/commands.zig");
-const Database = @import("cli/database.zig").Database;
+const Database = @import("lib/database.zig").Database;
 const Linenoise = @import("linenoise").Linenoise;
 
 pub fn main() !void {

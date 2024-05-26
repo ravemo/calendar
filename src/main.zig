@@ -16,10 +16,12 @@ const Renderer = draw.Renderer;
 const Surface = @import("lib/surface.zig").Surface;
 const WeekView = @import("lib/weekview.zig").WeekView;
 
-const Database = @import("cli/database.zig").Database;
+const Database = @import("lib/database.zig").Database;
 
 const task = @import("lib/task.zig");
 const Task = task.Task;
+const TaskList = task.TaskList;
+const Scheduler = @import("lib/scheduler.zig").Scheduler;
 
 const scrn_w = 800;
 const scrn_h = 600;
@@ -72,53 +74,6 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
     return 0;
 }
 
-fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*c]u8) callconv(.C) c_int {
-    const tasks: *std.ArrayList(Task) = @alignCast(@ptrCast(tasks_ptr));
-    const allocator = tasks.allocator;
-    var id: i32 = undefined;
-    var parent: ?i32 = null;
-    var name: []const u8 = undefined;
-    var time: Time = undefined;
-    var start: ?Date = null;
-    var due: ?Date = null;
-
-    for (0..@intCast(argc)) |i| {
-        const col = std.mem.span(cols[i]);
-        const val = if (argv[i]) |v| std.mem.span(v) else null;
-        if (std.mem.eql(u8, col, "uuid")) {
-            id = std.fmt.parseInt(i32, val.?, 10) catch return -1;
-        } else if (std.mem.eql(u8, col, "parent")) {
-            if (val) |v|
-                parent = std.fmt.parseInt(i32, v, 10) catch return -1;
-        } else if (std.mem.eql(u8, col, "desc")) {
-            name = allocator.dupe(u8, val.?) catch return -1;
-        } else if (std.mem.eql(u8, col, "start")) {
-            if (val) |v|
-                start = Date.fromString(v) catch return -1;
-        } else if (std.mem.eql(u8, col, "due")) {
-            if (val) |v|
-                due = calendar.Date.fromString(v) catch return -1;
-        } else if (std.mem.eql(u8, col, "time")) {
-            time = .{ .seconds = if (val) |v| std.fmt.parseInt(i32, v, 10) catch return -1 else 2 * 60 * 60 };
-        } else if (std.mem.eql(u8, col, "status")) {
-            if (val != null) return 0; // We don't care about finished tasks for now
-        } else {
-            if (false) std.debug.print("Unhandled column: {s}\n", .{col});
-        }
-    }
-
-    tasks.append(.{
-        .id = id,
-        .parent = parent,
-        .name = name,
-        .time = time,
-        .start = start,
-        .due = due,
-        .scheduled_start = null,
-    }) catch return -1;
-    return 0;
-}
-
 fn loadEvents(allocator: std.mem.Allocator, db: Database) !std.ArrayList(Event) {
     var events = std.ArrayList(Event).init(allocator);
     const query = try std.fmt.allocPrintZ(allocator,
@@ -132,18 +87,6 @@ fn loadEvents(allocator: std.mem.Allocator, db: Database) !std.ArrayList(Event) 
     try db.executeCB(query, load_event_cb, &events);
     std.debug.print("Loaded {} events.\n", .{events.items.len});
     return events;
-}
-
-fn loadTasks(allocator: std.mem.Allocator, db: Database) !std.ArrayList(Task) {
-    var tasks = std.ArrayList(Task).init(allocator);
-    const query = try std.fmt.allocPrintZ(allocator,
-        \\ SELECT * FROM tasks;
-    , .{});
-    defer allocator.free(query);
-
-    try db.executeCB(query, load_task_cb, &tasks);
-    std.debug.print("Loaded {} tasks.\n", .{tasks.items.len});
-    return tasks;
 }
 
 pub fn main() !void {
@@ -181,9 +124,10 @@ pub fn main() !void {
     // TODO: Use proper user_data_dir-like function when releasing to the public
     const tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
     const events = try loadEvents(allocator, events_db);
-    var tasks = try loadTasks(allocator, tasks_db);
-    try task.sanitize(&tasks);
-    try task.scheduleTasks(allocator, tasks.items, events.items);
+    var base_tasks = try TaskList.init(allocator, tasks_db);
+    try base_tasks.sanitize();
+    var scheduler = try Scheduler.init(allocator, events.items);
+    const tasks = try scheduler.scheduleTasks(base_tasks);
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
     var days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
@@ -279,7 +223,7 @@ pub fn main() !void {
 
         // Drawing
 
-        try draw.drawWeek(&weekview, events.items, tasks.items, Date.now());
+        try draw.drawWeek(&weekview, events.items, tasks.tasks.items, Date.now());
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);
 

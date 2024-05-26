@@ -3,6 +3,7 @@ const calendar = @import("event.zig");
 const Time = calendar.Time;
 const Date = calendar.Date;
 const Event = calendar.Event;
+const Database = @import("database.zig").Database;
 
 pub const Task = struct {
     const Self = @This();
@@ -21,150 +22,123 @@ pub const Task = struct {
     }
 };
 
-pub fn getParent(task: Task, tasks: []Task) !?*Task {
-    if (task.parent == null) return null;
-    for (tasks) |*t| {
-        if (t.id == task.parent) return t;
-    }
-    return error.InvalidParent;
-}
+fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*c]u8) callconv(.C) c_int {
+    const tasks: *std.ArrayList(Task) = @alignCast(@ptrCast(tasks_ptr));
+    const allocator = tasks.allocator;
+    var id: i32 = undefined;
+    var parent: ?i32 = null;
+    var name: []const u8 = undefined;
+    var time: Time = undefined;
+    var start: ?Date = null;
+    var due: ?Date = null;
 
-pub fn sanitize(tasks: *std.ArrayList(Task)) !void {
-    // Remove all subtasks that haven't been completed but whose parents have
-    var changed = true;
-    while (changed) {
-        changed = false;
-        for (tasks.items, 0..) |*t, i| {
-            _ = getParent(t.*, tasks.items) catch {
-                changed = true;
-                _ = tasks.swapRemove(i);
-                break;
-            };
+    for (0..@intCast(argc)) |i| {
+        const col = std.mem.span(cols[i]);
+        const val = if (argv[i]) |v| std.mem.span(v) else null;
+        if (std.mem.eql(u8, col, "uuid")) {
+            id = std.fmt.parseInt(i32, val.?, 10) catch return -1;
+        } else if (std.mem.eql(u8, col, "parent")) {
+            if (val) |v|
+                parent = std.fmt.parseInt(i32, v, 10) catch return -1;
+        } else if (std.mem.eql(u8, col, "desc")) {
+            name = allocator.dupe(u8, val.?) catch return -1;
+        } else if (std.mem.eql(u8, col, "start")) {
+            if (val) |v|
+                start = Date.fromString(v) catch return -1;
+        } else if (std.mem.eql(u8, col, "due")) {
+            if (val) |v|
+                due = calendar.Date.fromString(v) catch return -1;
+        } else if (std.mem.eql(u8, col, "time")) {
+            time = .{ .seconds = if (val) |v| std.fmt.parseInt(i32, v, 10) catch return -1 else 2 * 60 * 60 };
+        } else if (std.mem.eql(u8, col, "status")) {
+            if (val != null) return 0; // We don't care about finished tasks for now
+        } else {
+            if (false) std.debug.print("Unhandled column: {s}\n", .{col});
         }
     }
 
-    // Make all subtasks due dates and start dates consistent
-    changed = true;
-    while (changed) {
-        changed = false;
-        for (tasks.items) |*t| {
-            const parent = try getParent(t.*, tasks.items);
-            if (parent) |p| {
-                if (p.start) |s| {
-                    if (t.start == null or t.start.?.isBefore(s)) {
-                        t.start = p.start;
-                        changed = true;
+    tasks.append(.{
+        .id = id,
+        .parent = parent,
+        .name = name,
+        .time = time,
+        .start = start,
+        .due = due,
+        .scheduled_start = null,
+    }) catch return -1;
+    return 0;
+}
+
+pub const TaskList = struct {
+    const Self = @This();
+    tasks: std.ArrayList(Task),
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator, db: Database) !Self {
+        var tasks = std.ArrayList(Task).init(allocator);
+        const query = try std.fmt.allocPrintZ(allocator,
+            \\ SELECT * FROM tasks;
+        , .{});
+        defer allocator.free(query);
+
+        try db.executeCB(query, load_task_cb, &tasks);
+        std.debug.print("Loaded {} tasks.\n", .{tasks.items.len});
+        return .{ .tasks = tasks, .allocator = allocator };
+    }
+
+    pub fn getParent(self: Self, task: Task) !?*Task {
+        if (task.parent == null) return null;
+        for (self.tasks.items) |*t| {
+            if (t.id == task.parent) return t;
+        }
+        return error.InvalidParent;
+    }
+    pub fn sanitize(self: *Self) !void {
+        // Remove all subtasks that haven't been completed but whose parents have
+        var changed = true;
+        while (changed) {
+            changed = false;
+            for (self.tasks.items, 0..) |*t, i| {
+                _ = self.getParent(t.*) catch {
+                    changed = true;
+                    _ = self.tasks.swapRemove(i);
+                    break;
+                };
+            }
+        }
+
+        // Make all subtasks due dates and start dates consistent
+        changed = true;
+        while (changed) {
+            changed = false;
+            for (self.tasks.items) |*t| {
+                const parent = try self.getParent(t.*);
+                if (parent) |p| {
+                    if (p.start) |s| {
+                        if (t.start == null or t.start.?.isBefore(s)) {
+                            t.start = p.start;
+                            changed = true;
+                        }
                     }
                 }
             }
         }
     }
-}
 
-pub fn conflicts(task: Task, tasks: []Task) bool {
-    if (task.scheduled_start) |ts| {
-        for (tasks) |t| {
-            if (t.scheduled_start) |s| {
-                if (s.isBefore(ts) and task.getEnd().isBefore(t.getEnd()))
-                    return true;
-            }
-        }
-    }
-    return false;
-}
-pub fn getNextFree(now: Date, tasks: []Task) Date {
-    var free = now;
-    var changed = true;
-    while (changed) {
-        changed = false;
-        for (tasks) |t| {
-            if (t.scheduled_start) |s| {
-                if (s.isBeforeEq(free) and free.isBefore(t.getEnd())) {
-                    changed = true;
-                    free = t.getEnd();
+    pub fn getNextFree(self: Self, now: Date) Date {
+        var free = now;
+        var changed = true;
+        while (changed) {
+            changed = false;
+            for (self.tasks) |t| {
+                if (t.scheduled_start) |s| {
+                    if (s.isBeforeEq(free) and free.isBefore(t.getEnd())) {
+                        changed = true;
+                        free = t.getEnd();
+                    }
                 }
             }
         }
+        return free;
     }
-    return free;
-}
-
-pub fn cmpByDueDate(context: void, a: *Task, b: *Task) bool {
-    _ = context;
-    if (b.due) |bd| {
-        if (a.due) |ad| {
-            return ad.isBefore(bd);
-        } else unreachable;
-    } else unreachable;
-}
-pub fn cmpByStartDate(context: void, a: *Task, b: *Task) bool {
-    _ = context;
-    if (b.start) |bd| {
-        if (a.start) |ad| {
-            return ad.isBefore(bd);
-        } else unreachable;
-    } else unreachable;
-}
-
-pub fn scheduleTasks(allocator: std.mem.Allocator, tasks: []Task, events: []const Event) !void {
-    _ = events; // TODO make events block tasks
-    // First pass: schedule everything with a due date
-    // TODO: Sort tasks by due date
-    var due_tasks = std.ArrayList(*Task).init(allocator);
-    for (tasks) |*t| {
-        if (t.due == null) continue;
-        try due_tasks.append(t);
-    }
-    std.mem.sort(*Task, due_tasks.items, {}, cmpByDueDate);
-
-    var start_tasks = std.ArrayList(*Task).init(allocator);
-    for (tasks) |*t| {
-        if (t.start == null) continue;
-        try start_tasks.append(t);
-    }
-    std.mem.sort(*Task, start_tasks.items, {}, cmpByStartDate);
-
-    var cur_start = Date.now();
-    var has_changed = true;
-    while (has_changed) {
-        has_changed = false;
-        for (tasks) |*t| {
-            if (t.scheduled_start != null) continue;
-            if (t.start != null and cur_start.isBefore(t.start.?)) continue;
-
-            t.scheduled_start = cur_start;
-            cur_start = cur_start.after(t.time);
-            has_changed = true;
-        }
-
-        if (has_changed) continue;
-        for (start_tasks.items) |t| {
-            if (t.scheduled_start != null) continue;
-            cur_start = t.start.?;
-            t.scheduled_start = cur_start;
-            cur_start = cur_start.after(t.time);
-            has_changed = true;
-        }
-    }
-
-    // Sanity check
-    for (due_tasks.items) |t| {
-        if (t.scheduled_start == null) return error.IncompleteScheduling;
-    }
-
-    if (true) return; // TODO Implement second pass properly
-
-    // Second pass: schedule everything else
-    has_changed = true;
-    while (has_changed) {
-        has_changed = false;
-        for (tasks) |*t| {
-            if (t.scheduled_start != null) continue;
-            if (t.start != null and cur_start.isBefore(t.start.?)) continue;
-
-            t.scheduled_start = cur_start;
-            cur_start = cur_start.after(t.time);
-            has_changed = true;
-        }
-    }
-}
+};
