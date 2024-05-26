@@ -1,6 +1,7 @@
 const calendar = @import("event.zig");
 const Time = calendar.Time;
 const Date = calendar.Date;
+const Event = calendar.Event;
 
 pub const Task = struct {
     const Self = @This();
@@ -17,3 +18,12 @@ pub const Task = struct {
         return self.scheduled_start.after(self.time);
     }
 };
+
+pub fn scheduleTasks(tasks: []Task, events: []const Event) void {
+    _ = events; // TODO make events block tasks
+    var cur_start = Date.now();
+    for (tasks) |*t| {
+        t.scheduled_start = cur_start;
+        cur_start = cur_start.after(t.time);
+    }
+}

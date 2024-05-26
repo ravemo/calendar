@@ -18,7 +18,8 @@ const WeekView = @import("lib/weekview.zig").WeekView;
 
 const Database = @import("cli/database.zig").Database;
 
-const Task = @import("lib/task.zig").Task;
+const task = @import("lib/task.zig");
+const Task = task.Task;
 
 const scrn_w = 800;
 const scrn_h = 600;
@@ -184,6 +185,7 @@ pub fn main() !void {
         .time = .{ .hours = 2 },
         .scheduled_start = Date.now(),
     });
+    task.scheduleTasks(tasks.items, events.items);
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
     var days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);

@@ -15,12 +15,12 @@ const VAlignment = enum {
     Bottom,
 };
 
-pub fn drawText(renderer: anytype, label: []const u8, x: f32, y: f32, h_align: HAlignment, v_align: VAlignment) void {
+pub fn drawText(renderer: anytype, label: []const u8, x: f32, y: f32, max_w: f32, h_align: HAlignment, v_align: VAlignment) void {
     const allocator = std.heap.page_allocator;
     const new_label = allocator.dupeZ(u8, label) catch "ERROR";
-    drawTextZ(renderer, new_label, x, y, h_align, v_align);
+    drawTextZ(renderer, new_label, x, y, max_w, h_align, v_align);
 }
-pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, h_align: HAlignment, v_align: VAlignment) void {
+pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, max_w: f32, h_align: HAlignment, v_align: VAlignment) void {
     const size = 16;
 
     const font = c.TTF_OpenFont("data/Mecha.ttf", size);
@@ -30,7 +30,10 @@ pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, h_align
     var color: c.SDL_Color = undefined;
     _ = c.SDL_GetRenderDrawColor(renderer, &color.r, &color.g, &color.b, &color.a);
 
-    const text_surface = c.TTF_RenderText_Solid(font, label, color);
+    const text_surface = if (max_w < 0)
+        c.TTF_RenderUTF8_Blended(font, label, color)
+    else
+        c.TTF_RenderUTF8_Blended_Wrapped(font, label, color, @intFromFloat(max_w));
     if (label.len == 0)
         return;
     defer c.SDL_FreeSurface(text_surface);
