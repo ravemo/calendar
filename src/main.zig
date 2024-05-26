@@ -18,6 +18,8 @@ const WeekView = @import("lib/weekview.zig").WeekView;
 
 const Database = @import("cli/database.zig").Database;
 
+const Task = @import("lib/task.zig").Task;
+
 const scrn_w = 800;
 const scrn_h = 600;
 
@@ -116,8 +118,14 @@ pub fn main() !void {
     const sizens_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_SIZENS);
 
     var db = try Database.init("calendar.db");
-    var events = try loadEvents(allocator, db);
-    events = events;
+    const events = try loadEvents(allocator, db);
+    var tasks = std.ArrayList(Task).init(allocator);
+    try tasks.append(.{
+        .id = 1,
+        .name = "Test",
+        .time = .{ .hours = 2 },
+        .scheduled_start = Date.now(),
+    });
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
     var days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
@@ -213,7 +221,7 @@ pub fn main() !void {
 
         // Drawing
 
-        try draw.drawWeek(&weekview, events.items, Date.now());
+        try draw.drawWeek(&weekview, events.items, tasks.items, Date.now());
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);
 

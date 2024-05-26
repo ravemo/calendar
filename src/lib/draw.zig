@@ -7,6 +7,7 @@ const Weekday = calendar.Weekday;
 const Time = calendar.Time;
 const Surface = @import("surface.zig").Surface;
 const WeekView = @import("weekview.zig").WeekView;
+const Task = @import("task.zig").Task;
 
 const text = @import("text.zig");
 const arc = @import("arc.zig");
@@ -22,6 +23,7 @@ const text_color = arc.colorFromHex(0x000000ff);
 const grid_color = arc.colorFromHex(0xeeeeeeff);
 const divider_color = arc.colorFromHex(0xaaaaaaff);
 const event_color = arc.colorFromHex(0x1f842188);
+const task_color = arc.colorFromHex(0x22accc88);
 
 pub fn drawGrid(sf: Surface) void {
     const renderer = sf.renderer;
@@ -150,7 +152,39 @@ pub fn drawEvent(wv: *WeekView, event: Event, now: Date) !void {
     }
 }
 
-pub fn drawWeek(wv: *WeekView, events: []Event, now: Date) !void {
+pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
+    const renderer = wv.sf.renderer;
+    // TODO: Split if the event crosses the day boundary
+
+    var draw_task = task;
+    // TODO: Check if task is visible inside week view
+
+    const h = draw_task.time.getHoursF();
+
+    const x = xFromWeekday(draw_task.scheduled_start.getWeekday(), wv.sf.w) + 3;
+    const y = yFromHour(draw_task.scheduled_start.getHourF(), wv.sf.h);
+    arc.setColor(renderer, task_color);
+    const rect = c.SDL_FRect{
+        .x = x,
+        .y = y,
+        .w = wv.sf.w / 7 - 6,
+        .h = h * wv.sf.h / 24,
+    };
+    _ = c.SDL_RenderFillRectF(renderer, &rect);
+
+    arc.setColor(renderer, text_color);
+    text.drawText(renderer, draw_task.name, x + 2, y + 2, .Left, .Top);
+}
+pub fn drawTask(wv: *WeekView, task: Task, now: Date) !void {
+    _ = now; // TODO: Draw tasks greyed-out if they are already past
+
+    // TODO Check task's start and due to see whether it would even appear on
+    // the current week view
+
+    try drawSingleTask(wv, task);
+}
+
+pub fn drawWeek(wv: *WeekView, events: []Event, tasks: []Task, now: Date) !void {
     const renderer = wv.sf.renderer;
     _ = c.SDL_SetRenderTarget(renderer, wv.sf.tex);
     arc.setColor(renderer, background_color);
@@ -167,6 +201,10 @@ pub fn drawWeek(wv: *WeekView, events: []Event, now: Date) !void {
 
     for (events) |e| {
         try drawEvent(wv, e, now);
+    }
+
+    for (tasks) |t| {
+        try drawTask(wv, t, now);
     }
     _ = c.SDL_SetRenderTarget(renderer, null);
 }
@@ -204,8 +242,6 @@ pub fn drawDays(sf: Surface, now: Date) void {
     _ = c.SDL_SetRenderTarget(renderer, sf.tex);
     _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
     _ = c.SDL_RenderClear(renderer);
-
-    drawGrid(sf);
 
     arc.setColor(renderer, text_color);
     const start_day: usize = @intCast(now.getWeekStart().tm.tm_mday);
