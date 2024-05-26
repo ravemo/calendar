@@ -30,11 +30,11 @@ pub fn cmpByDueDate(context: void, a: Task, b: Task) bool {
     } else return false;
 }
 
-fn getBestTask(interval: Interval, tasks: *[]Task) ?*Task {
-    for (tasks.*) |*t| {
+fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
+    for (tasks.tasks.items) |*t| {
         if (t.start) |s|
             if (interval.start.isBefore(s)) continue;
-        return t;
+        return tasks.getFirstTask(t);
     }
 
     return null;
@@ -58,15 +58,14 @@ pub const Scheduler = struct {
 
     pub fn scheduleTasks(self: *Self, tl: TaskList) !TaskList {
         var scheduled = std.ArrayList(Task).init(self.allocator);
-        var unscheduled = try tl.tasks.clone();
+        var unscheduled = .{ .tasks = try tl.tasks.clone(), .allocator = tl.allocator };
 
         // TODO Split intervals based on start dates of tasks
         var interval = self.intervals.items[0];
 
-        std.mem.sort(Task, unscheduled.items, {}, cmpByDueDate);
-        while (unscheduled.items.len > 0) {
-            std.debug.print("{}\n", .{unscheduled.items.len});
-            const best_opt = getBestTask(interval, &unscheduled.items);
+        std.mem.sort(Task, unscheduled.tasks.items, {}, cmpByDueDate);
+        while (unscheduled.tasks.items.len > 0) {
+            const best_opt = getBestTask(interval, &unscheduled);
             if (best_opt) |best| {
                 best.scheduled_start = interval.start;
                 interval.start = interval.start.after(best.time);
@@ -78,11 +77,10 @@ pub const Scheduler = struct {
                 try scheduled.append(best.*);
 
                 var found = false;
-                for (unscheduled.items, 0..) |*t, i| {
-                    std.debug.print("{*} ?= {*}\n", .{ t, best });
+                for (unscheduled.tasks.items, 0..) |*t, i| {
                     if (t == best) {
                         found = true;
-                        _ = unscheduled.swapRemove(i);
+                        _ = unscheduled.tasks.swapRemove(i);
                         break;
                     }
                 }
