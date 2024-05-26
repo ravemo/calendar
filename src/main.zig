@@ -76,6 +76,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
     const tasks: *std.ArrayList(Task) = @alignCast(@ptrCast(tasks_ptr));
     const allocator = tasks.allocator;
     var id: i32 = undefined;
+    var parent: ?i32 = null;
     var name: []const u8 = undefined;
     var time: Time = undefined;
     var start: ?Date = null;
@@ -86,6 +87,9 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
         const val = if (argv[i]) |v| std.mem.span(v) else null;
         if (std.mem.eql(u8, col, "uuid")) {
             id = std.fmt.parseInt(i32, val.?, 10) catch return -1;
+        } else if (std.mem.eql(u8, col, "parent")) {
+            if (val) |v|
+                parent = std.fmt.parseInt(i32, v, 10) catch return -1;
         } else if (std.mem.eql(u8, col, "desc")) {
             name = allocator.dupe(u8, val.?) catch return -1;
         } else if (std.mem.eql(u8, col, "start")) {
@@ -105,6 +109,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
 
     tasks.append(.{
         .id = id,
+        .parent = parent,
         .name = name,
         .time = time,
         .start = start,
@@ -176,7 +181,8 @@ pub fn main() !void {
     // TODO: Use proper user_data_dir-like function when releasing to the public
     const tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
     const events = try loadEvents(allocator, events_db);
-    const tasks = try loadTasks(allocator, tasks_db);
+    var tasks = try loadTasks(allocator, tasks_db);
+    try task.sanitize(&tasks);
     try task.scheduleTasks(allocator, tasks.items, events.items);
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);

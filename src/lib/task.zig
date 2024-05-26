@@ -7,6 +7,7 @@ const Event = calendar.Event;
 pub const Task = struct {
     const Self = @This();
     id: i32,
+    parent: ?i32,
     name: []const u8,
     time: Time,
     start: ?Date,
@@ -19,6 +20,46 @@ pub const Task = struct {
         return if (self.scheduled_start) |s| s.after(self.time) else self.due;
     }
 };
+
+pub fn getParent(task: Task, tasks: []Task) !?*Task {
+    if (task.parent == null) return null;
+    for (tasks) |*t| {
+        if (t.id == task.parent) return t;
+    }
+    return error.InvalidParent;
+}
+
+pub fn sanitize(tasks: *std.ArrayList(Task)) !void {
+    // Remove all subtasks that haven't been completed but whose parents have
+    var changed = true;
+    while (changed) {
+        changed = false;
+        for (tasks.items, 0..) |*t, i| {
+            _ = getParent(t.*, tasks.items) catch {
+                changed = true;
+                _ = tasks.swapRemove(i);
+                break;
+            };
+        }
+    }
+
+    // Make all subtasks due dates and start dates consistent
+    changed = true;
+    while (changed) {
+        changed = false;
+        for (tasks.items) |*t| {
+            const parent = try getParent(t.*, tasks.items);
+            if (parent) |p| {
+                if (p.start) |s| {
+                    if (t.start == null or t.start.?.isBefore(s)) {
+                        t.start = p.start;
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+}
 
 pub fn conflicts(task: Task, tasks: []Task) bool {
     if (task.scheduled_start) |ts| {
