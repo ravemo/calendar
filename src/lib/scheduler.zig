@@ -31,10 +31,15 @@ pub fn cmpByDueDate(context: void, a: Task, b: Task) bool {
 }
 
 fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
+    if (Date.now().after(.{ .weeks = 1 }).isBefore(interval.start)) {
+        std.debug.print("TODO REMOVE ME: Quitting early\n", .{});
+        return null;
+    }
     for (tasks.tasks.items) |*t| {
-        if (t.start) |s|
+        if (t.start) |s| {
             if (interval.start.isBefore(s)) continue;
-        return tasks.getFirstTask(t);
+        }
+        return tasks.getFirstTask(t, interval.start);
     }
 
     return null;

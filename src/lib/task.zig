@@ -142,7 +142,7 @@ pub const TaskList = struct {
         return free;
     }
 
-    pub fn getFirstTask(self: Self, task: *Task) *Task {
+    pub fn getFirstTask(self: Self, task: *Task, at_time: Date) *Task {
         // Return first task that needs to be completed for this task to be
         // completed as well.
         // Starts by dependencies first, and then by children
@@ -150,7 +150,8 @@ pub const TaskList = struct {
         // TODO: Handle dependencies
         for (self.tasks.items) |*t| {
             if (t.parent == task.id) {
-                return self.getFirstTask(t);
+                if (t.start != null and at_time.isBefore(t.start.?)) continue;
+                return self.getFirstTask(t, at_time);
             }
         }
         return task;
