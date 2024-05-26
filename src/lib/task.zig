@@ -12,4 +12,8 @@ pub const Task = struct {
     // TODO: repeat info
     scheduled_start: Date,
     // TODO: Tasks should be able to be split, so we need scheduled_time
+
+    pub fn getEnd(self: Self) Date {
+        return self.scheduled_start.after(self.time);
+    }
 };

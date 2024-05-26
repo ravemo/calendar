@@ -157,6 +157,19 @@ pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
     // TODO: Split if the event crosses the day boundary
 
     var draw_task = task;
+    var draw_start = task.scheduled_start;
+    // if task starts after end of current view or ends before start of current
+    // view, don't even draw it
+    if (wv.getEnd().isBeforeEq(draw_start) or
+        draw_task.getEnd().isBeforeEq(wv.start))
+        return;
+    // If task starts before current view, set start to start of current view
+    if (draw_start.isBefore(wv.start))
+        draw_start = wv.start;
+    // If task end after current view, set end to end of current view
+    if (wv.getEnd().isBefore(draw_task.getEnd()))
+        draw_task.time = wv.getEnd().timeSince(draw_start);
+    draw_task.scheduled_start = draw_start;
     // TODO: Check if task is visible inside week view
 
     const h = draw_task.time.getHoursF();
@@ -173,7 +186,8 @@ pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
     _ = c.SDL_RenderFillRectF(renderer, &rect);
 
     arc.setColor(renderer, text_color);
-    text.drawText(renderer, draw_task.name, x + 2, y + 2, .Left, .Top);
+    if (rect.h > 20)
+        text.drawText(renderer, draw_task.name, x + 2, y + 2, .Left, .Top);
 }
 pub fn drawTask(wv: *WeekView, task: Task, now: Date) !void {
     _ = now; // TODO: Draw tasks greyed-out if they are already past
