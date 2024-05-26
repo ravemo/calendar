@@ -229,7 +229,7 @@ pub const Date = struct {
     }
 
     pub fn fromString(str: [:0]const u8) StringError!Date {
-        const pattern_ymd = "^(?:(?'year'\\d{4})(?:-(?'month'\\d{2})(?:-(?'day'\\d{2}))?)?)?(?: ?(?'hours'\\d{2}):?(?'minutes'\\d{2}))?$";
+        const pattern_ymd = "^(?:(?'year'\\d{4})(?:-(?'month'\\d{2})(?:-(?'day'\\d{2}))?)?)?(?: ?(?'hours'\\d{2}):?(?:(?'minutes'\\d{2})(?::(?'seconds'\\d{2}))?)?)?$";
         const pattern_md = "^(?:(\\d{2})-(\\d{2}))(?: (\\d{2}):?(\\d{2}))?$";
         _ = pattern_md; // TODO
 
@@ -244,6 +244,7 @@ pub const Date = struct {
             Day,
             Hours,
             Minutes,
+            Seconds,
         };
         const parts = [_]struct { str: [:0]const u8, val: DatePart }{
             .{ .str = "year", .val = .Year },
@@ -251,6 +252,7 @@ pub const Date = struct {
             .{ .str = "day", .val = .Day },
             .{ .str = "hours", .val = .Hours },
             .{ .str = "minutes", .val = .Minutes },
+            .{ .str = "seconds", .val = .Seconds },
         };
         var date = Date.default();
         for (parts) |part| {
@@ -264,6 +266,7 @@ pub const Date = struct {
                     .Day => date.setDay(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
                     .Hours => date.setHours(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
                     .Minutes => date.setMinutes(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
+                    .Seconds => date.setSeconds(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
                 }
                 date.update();
                 cap.deinitMatch(substr);
@@ -391,6 +394,9 @@ pub const Date = struct {
     }
     pub fn setMinutes(self: *Self, minute: i32) void {
         self.tm.tm_min = minute;
+    }
+    pub fn setSeconds(self: *Self, seconds: i32) void {
+        self.tm.tm_sec = seconds;
     }
 
     pub fn update(self: *Self) void {

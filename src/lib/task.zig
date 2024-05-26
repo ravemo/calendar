@@ -7,7 +7,9 @@ pub const Task = struct {
     id: i32,
     name: []const u8,
     time: Time,
-    // TODO: start, due, repeat info
+    start: ?Date,
+    due: ?Date,
+    // TODO: repeat info
     scheduled_start: Date,
     // TODO: Tasks should be able to be split, so we need scheduled_time
 };
