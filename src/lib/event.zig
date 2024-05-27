@@ -403,7 +403,15 @@ pub const Date = struct {
         _ = c.mktime(&self.tm);
     }
 
-    // TODO
+    pub fn print(self: Self) void {
+        std.debug.print("{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}", .{
+            @as(u32, @intCast(self.tm.tm_year + 1900)),
+            @as(u32, @intCast(self.tm.tm_mon + 1)),
+            @as(u32, @intCast(self.tm.tm_mday)),
+            @as(u32, @intCast(self.tm.tm_hour)),
+            @as(u32, @intCast(self.tm.tm_min)),
+        });
+    }
 };
 
 pub const Pattern = struct {

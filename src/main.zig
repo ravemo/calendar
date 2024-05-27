@@ -126,7 +126,7 @@ pub fn main() !void {
     const events = try loadEvents(allocator, events_db);
     var base_tasks = try TaskList.init(allocator, tasks_db);
     try base_tasks.sanitize();
-    var scheduler = try Scheduler.init(allocator, events.items);
+    var scheduler = try Scheduler.init(allocator, events.items, base_tasks);
     const tasks = try scheduler.scheduleTasks(base_tasks);
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);

@@ -12,6 +12,36 @@ const Interval = struct {
     end: ?Date,
 };
 
+const IntervalIterator = struct {
+    const Self = @This();
+    cur: Interval,
+
+    fn init(allocator: std.mem.Allocator, events: []Event, tasks: TaskList) Self {
+        _ = allocator; // TODO: store multiple intervals rather than a single one
+        _ = events; // TODO: Break intervals based on events
+        _ = tasks; // TODO: Break intervals at start dates
+        return .{
+            .cur = .{ .start = Date.now(), .end = null },
+        };
+    }
+
+    fn next(self: *Self, step: Time) ?Interval {
+        if (self.cur.end) |e|
+            if (e.isBeforeEq(self.cur.start)) return null;
+
+        var ret = self.cur;
+        ret.end = ret.start.after(step);
+        const day_end = self.cur.start.after(.{ .days = 1 }).getDayStart();
+        if (self.cur.end) |e| {
+            if (day_end.isBefore(e))
+                ret.end = day_end;
+        } else if (day_end.isBefore(ret.end.?)) ret.end = day_end;
+
+        self.cur.start = ret.end.?;
+        return ret;
+    }
+};
+
 pub fn cmpByStartDate(context: void, a: *Task, b: *Task) bool {
     _ = context;
     if (b.start) |bd| {
@@ -48,13 +78,10 @@ fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
 pub const Scheduler = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
-    intervals: std.ArrayList(Interval),
+    intervals: IntervalIterator,
 
-    pub fn init(allocator: std.mem.Allocator, events: []Event) !Self {
-        _ = events; // TODO Load intervals according to the events
-        var intervals = std.ArrayList(Interval).init(allocator);
-        try intervals.append(.{ .start = Date.now(), .end = null });
-        return .{ .allocator = allocator, .intervals = intervals };
+    pub fn init(allocator: std.mem.Allocator, events: []Event, tl: TaskList) !Self {
+        return .{ .allocator = allocator, .intervals = IntervalIterator.init(allocator, events, tl) };
     }
 
     pub fn deinit(self: Self) void {
@@ -62,24 +89,20 @@ pub const Scheduler = struct {
     }
 
     pub fn scheduleTasks(self: *Self, tl: TaskList) !TaskList {
-        var scheduled = std.ArrayList(Task).init(self.allocator);
+        var scheduled = .{ .tasks = std.ArrayList(Task).init(self.allocator), .allocator = self.allocator };
         var unscheduled = .{ .tasks = try tl.tasks.clone(), .allocator = tl.allocator };
 
         // TODO Split intervals based on start dates of tasks
-        var interval = self.intervals.items[0];
+        var interval = self.intervals.cur;
 
         std.mem.sort(Task, unscheduled.tasks.items, {}, cmpByDueDate);
         while (unscheduled.tasks.items.len > 0) {
             const best_opt = getBestTask(interval, &unscheduled);
             if (best_opt) |best| {
+                interval = self.intervals.next(best.time) orelse return scheduled;
                 best.scheduled_start = interval.start;
-                interval.start = interval.start.after(best.time);
-                if (interval.end != null and interval.end.?.isBeforeEq(interval.start)) {
-                    _ = self.intervals.orderedRemove(0);
-                    interval = self.intervals.items[0];
-                }
 
-                try scheduled.append(best.*);
+                try scheduled.tasks.append(best.*);
 
                 var found = false;
                 for (unscheduled.tasks.items, 0..) |*t, i| {
@@ -96,6 +119,6 @@ pub const Scheduler = struct {
         // TODO Merge tasks that start right after another (artifact of spliting
         // intervals at start dates)
 
-        return .{ .tasks = scheduled, .allocator = self.allocator };
+        return scheduled;
     }
 };
