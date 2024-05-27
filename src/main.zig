@@ -225,7 +225,7 @@ pub fn main() !void {
 
         // Drawing
 
-        var events_it = try EventIterator.init(events, weekview.start);
+        var events_it = try EventIterator.init(allocator, events.items, weekview.start);
         try draw.drawWeek(&weekview, &events_it, tasks.tasks.items, Date.now());
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);

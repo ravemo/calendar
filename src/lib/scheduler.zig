@@ -4,41 +4,138 @@ const Time = datetime.Time;
 const Date = datetime.Date;
 const event_lib = @import("event.zig");
 const Event = event_lib.Event;
+const EventIterator = event_lib.EventIterator;
 const task_lib = @import("task.zig");
 const Task = task_lib.Task;
 const TaskList = task_lib.TaskList;
 
+const print = std.debug.print;
+
 const Interval = struct {
     start: Date,
     end: ?Date,
+
+    pub fn print(self: Interval) void {
+        self.start.print();
+        std.debug.print(" ~ ", .{});
+        if (self.end) |e| e.print() else std.debug.print("infinity", .{});
+    }
 };
 
 const IntervalIterator = struct {
     const Self = @This();
-    cur: Interval,
+    intervals: std.ArrayList(Interval),
 
-    fn init(allocator: std.mem.Allocator, events: []Event, tasks: TaskList) Self {
-        _ = allocator; // TODO: store multiple intervals rather than a single one
-        _ = events; // TODO: Break intervals based on events
+    fn init(allocator: std.mem.Allocator, event_list: []Event, tasks: TaskList) !Self {
+        var events = try EventIterator.init(allocator, event_list, Date.now());
+        defer events.deinit();
         _ = tasks; // TODO: Break intervals at start dates
+        var intervals = std.ArrayList(Interval).init(allocator);
+        try intervals.append(.{ .start = Date.now(), .end = null });
+        var i: usize = 0;
+        const limit = Date.now().after(.{ .weeks = 1 });
+        var e_opt = events.next(limit);
+        while (i < intervals.items.len) {
+            if (e_opt == null) break;
+            const interval = &intervals.items[i];
+            const start = interval.start;
+            if (limit.isBefore(start)) break;
+
+            if (interval.end) |end| {
+                while (e_opt) |e| {
+                    if (limit.isBefore(e.start)) break;
+                    if (end.isBefore(e.start)) break; // Nothing to do
+                    const e_end = e.getEnd();
+
+                    if (e.start.isBefore(start) and end.isBefore(e_end)) {
+                        // --------- | Interval | -----------
+                        // ------ |     Event      | --------
+                        _ = intervals.orderedRemove(i);
+                    } else if (end.isBefore(e_end) and e.start.isBefore(end)) {
+                        // --- | Interval | -----------
+                        // ----------| Event | --------
+                        interval.end = e.start;
+                        i += 1;
+                    } else if (start.isBefore(e_end) and e.start.isBefore(start)) {
+                        // --------- | Interval | ----
+                        // ------| Event | -----------
+                        interval.start = e_end;
+                        i += 1;
+                    } else if (start.isBefore(e.start) and e_end.isBefore(end)) {
+                        // ----- |   Interval   | -----
+                        // ---------| Event | ---------
+                        var copy = interval.*;
+                        interval.end = e.start;
+                        copy.start = e_end;
+                        try intervals.insert(i + 1, copy);
+                        i += 1;
+                        break;
+                    } else {
+                        // Interval is after event; iterate over events to catch up
+                        e_opt = events.next(limit);
+                        if (e_opt == null) break;
+                    }
+                }
+            } else {
+                while (e_opt) |e| {
+                    std.debug.assert(i == intervals.items.len - 1);
+                    if (limit.isBefore(e.start)) break;
+                    const e_end = e.getEnd();
+
+                    if (start.isBefore(e.start)) {
+                        // --- | Interval                   -->
+                        // ----------| Event | --------
+                        var copy = interval.*;
+                        interval.end = e.start;
+                        copy.start = e_end;
+                        try intervals.append(copy);
+                        i += 1;
+                        break;
+                    } else if (e.start.isBefore(start) and start.isBefore(e_end)) {
+                        // --------- | Interval                  -->
+                        // ------ |     Event      | --------
+                        interval.start = e_end;
+                    } else {
+                        // Interval is after event; iterate over events to catch up
+                        e_opt = events.next(limit);
+                        if (e_opt == null) break;
+                    }
+                }
+            }
+        }
+
         return .{
-            .cur = .{ .start = Date.now(), .end = null },
+            .intervals = intervals,
         };
     }
 
     fn next(self: *Self, step: Time) ?Interval {
-        if (self.cur.end) |e|
-            if (e.isBeforeEq(self.cur.start)) return null;
+        var cur = &self.intervals.items[0];
+        while (true) {
+            if (cur.end) |e| {
+                std.debug.print("cur: ", .{});
+                cur.print();
+                std.debug.print("\n", .{});
+                if (e.isBeforeEq(cur.start)) {
+                    _ = self.intervals.orderedRemove(0);
+                    if (self.intervals.items.len == 0) return null;
+                } else {
+                    break;
+                }
+            } else break;
+        }
 
-        var ret = self.cur;
+        // Generate interval to return
+        var ret = cur.*;
         ret.end = ret.start.after(step);
-        const day_end = self.cur.start.after(.{ .days = 1 }).getDayStart();
-        if (self.cur.end) |e| {
-            if (day_end.isBefore(e))
-                ret.end = day_end;
-        } else if (day_end.isBefore(ret.end.?)) ret.end = day_end;
 
-        self.cur.start = ret.end.?;
+        // Split at day transition
+        const day_end = ret.start.after(.{ .days = 1 }).getDayStart();
+        if (day_end.isBefore(ret.end.?))
+            ret.end = day_end;
+
+        cur.start = ret.end.?;
+
         return ret;
     }
 };
@@ -73,7 +170,10 @@ pub const Scheduler = struct {
     intervals: IntervalIterator,
 
     pub fn init(allocator: std.mem.Allocator, events: []Event, tl: TaskList) !Self {
-        return .{ .allocator = allocator, .intervals = IntervalIterator.init(allocator, events, tl) };
+        return .{
+            .allocator = allocator,
+            .intervals = try IntervalIterator.init(allocator, events, tl),
+        };
     }
 
     pub fn deinit(self: Self) void {
@@ -85,7 +185,7 @@ pub const Scheduler = struct {
         var unscheduled = TaskList{ .tasks = try tl.tasks.clone(), .allocator = tl.allocator };
 
         // TODO Split intervals based on start dates of tasks
-        var interval = self.intervals.cur;
+        var interval = self.intervals.intervals.items[0];
 
         std.mem.sort(Task, unscheduled.tasks.items, {}, cmpByDueDate);
         while (unscheduled.tasks.items.len > 0) {

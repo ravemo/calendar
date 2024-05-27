@@ -63,10 +63,15 @@ pub const EventIterator = struct {
     events: std.ArrayList(Event),
     time: Date,
 
-    pub fn init(events: std.ArrayList(Event), start: Date) !Self {
-        const new_events = try events.clone();
+    pub fn init(allocator: std.mem.Allocator, events: []Event, start: Date) !Self {
+        var new_events = std.ArrayList(Event).init(allocator);
+        try new_events.appendSlice(events);
         std.mem.sort(Event, new_events.items, {}, cmpByStartDate);
         return .{ .events = new_events, .time = start };
+    }
+
+    pub fn deinit(self: Self) void {
+        self.events.deinit();
     }
 
     pub fn finishEvent(self: *Self, event: Event) void {
