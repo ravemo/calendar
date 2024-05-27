@@ -5,11 +5,12 @@ const c = @cImport({
     @cInclude("SDL2/SDL_ttf.h");
 });
 
-const calendar = @import("lib/event.zig");
-const StringError = calendar.StringError;
-const Event = calendar.Event;
-const Date = calendar.Date;
-const Time = calendar.Time;
+const datetime = @import("lib/datetime.zig");
+const StringError = datetime.StringError;
+const Date = datetime.Date;
+const Time = datetime.Time;
+const event_lib = @import("lib/event.zig");
+const Event = event_lib.Event;
 
 const draw = @import("lib/draw.zig");
 const Renderer = draw.Renderer;
@@ -36,7 +37,7 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
     var has_repeat = false;
     var r_start: ?Date = null;
     var r_end: ?Date = null;
-    var repeat: ?calendar.RepeatInfo = null;
+    var repeat: ?datetime.RepeatInfo = null;
     repeat = repeat;
 
     for (0..@intCast(argc)) |i| {
@@ -49,7 +50,7 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
         } else if (std.mem.eql(u8, col, "E_Start")) {
             start = Date.fromString(val.?) catch return -1;
         } else if (std.mem.eql(u8, col, "E_End")) {
-            end = calendar.Date.fromString(val.?) catch return -1;
+            end = datetime.Date.fromString(val.?) catch return -1;
         } else if (std.mem.eql(u8, col, "Repeat")) {
             if (val != null) has_repeat = true;
         } else if (std.mem.eql(u8, col, "R_Start")) {
@@ -61,7 +62,7 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
                 r_end = Date.fromString(v) catch return -1;
         } else if (std.mem.eql(u8, col, "Period")) {
             if (val) |v|
-                repeat = .{ .period = calendar.Period.fromString(v) catch return -1 };
+                repeat = .{ .period = datetime.Period.fromString(v) catch return -1 };
         }
     }
 

@@ -1,8 +1,9 @@
 const std = @import("std");
-const calendar = @import("event.zig");
-const Time = calendar.Time;
-const Date = calendar.Date;
-const Event = calendar.Event;
+const datetime = @import("datetime.zig");
+const Time = datetime.Time;
+const Date = datetime.Date;
+const event_lib = @import("event.zig");
+const Event = event_lib.Event;
 const Database = @import("database.zig").Database;
 
 pub const Task = struct {
@@ -47,7 +48,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
                 start = Date.fromString(v) catch return -1;
         } else if (std.mem.eql(u8, col, "due")) {
             if (val) |v|
-                due = calendar.Date.fromString(v) catch return -1;
+                due = Date.fromString(v) catch return -1;
         } else if (std.mem.eql(u8, col, "time")) {
             time = .{ .seconds = if (val) |v| std.fmt.parseInt(i32, v, 10) catch return -1 else 2 * 60 * 60 };
         } else if (std.mem.eql(u8, col, "status")) {

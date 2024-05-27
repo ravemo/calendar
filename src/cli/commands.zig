@@ -6,10 +6,10 @@ const Linenoise = @import("linenoise").Linenoise;
 
 const Database = @import("../lib/database.zig").Database;
 
-const calendar = @import("../lib/event.zig");
-const StringError = calendar.StringError;
-const RepeatInfo = calendar.RepeatInfo;
-const Date = calendar.Date;
+const datetime = @import("../lib/datetime.zig");
+const StringError = datetime.StringError;
+const RepeatInfo = datetime.RepeatInfo;
+const Date = datetime.Date;
 
 const AddCmd = struct {
     const Self = @This();

@@ -3,7 +3,7 @@ const c = @cImport({
     @cInclude("pcre.h");
 });
 
-const StringError = @import("event.zig").StringError;
+const StringError = @import("datetime.zig").StringError;
 
 pub const Captures = struct {
     const Self = @This();

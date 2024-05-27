@@ -1,6 +1,6 @@
 const std = @import("std");
 const Surface = @import("surface.zig").Surface;
-const Date = @import("event.zig").Date;
+const Date = @import("datetime.zig").Date;
 
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
