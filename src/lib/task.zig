@@ -156,4 +156,14 @@ pub const TaskList = struct {
         }
         return task;
     }
+
+    pub fn remove(self: *Self, to_remove: *Task) bool {
+        for (self.tasks.items, 0..) |*t, i| {
+            if (t == to_remove) {
+                _ = self.tasks.swapRemove(i);
+                return true;
+            }
+        }
+        return false;
+    }
 };

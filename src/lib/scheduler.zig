@@ -89,8 +89,8 @@ pub const Scheduler = struct {
     }
 
     pub fn scheduleTasks(self: *Self, tl: TaskList) !TaskList {
-        var scheduled = .{ .tasks = std.ArrayList(Task).init(self.allocator), .allocator = self.allocator };
-        var unscheduled = .{ .tasks = try tl.tasks.clone(), .allocator = tl.allocator };
+        var scheduled = TaskList{ .tasks = std.ArrayList(Task).init(self.allocator), .allocator = self.allocator };
+        var unscheduled = TaskList{ .tasks = try tl.tasks.clone(), .allocator = tl.allocator };
 
         // TODO Split intervals based on start dates of tasks
         var interval = self.intervals.cur;
@@ -101,18 +101,21 @@ pub const Scheduler = struct {
             if (best_opt) |best| {
                 interval = self.intervals.next(best.time) orelse return scheduled;
                 best.scheduled_start = interval.start;
+                if (interval.end) |e| {
+                    if (e.isBefore(best.getEnd().?)) {
+                        var copy = best.*;
+                        copy.time = e.timeSince(interval.start);
+                        best.time = best.time.sub(copy.time);
 
-                try scheduled.tasks.append(best.*);
-
-                var found = false;
-                for (unscheduled.tasks.items, 0..) |*t, i| {
-                    if (t == best) {
-                        found = true;
-                        _ = unscheduled.tasks.swapRemove(i);
-                        break;
+                        try scheduled.tasks.append(copy);
+                    } else {
+                        try scheduled.tasks.append(best.*);
+                        if (!unscheduled.remove(best)) unreachable;
                     }
+                } else {
+                    try scheduled.tasks.append(best.*);
+                    if (!unscheduled.remove(best)) unreachable;
                 }
-                if (!found) unreachable;
             } else break;
         }
 
