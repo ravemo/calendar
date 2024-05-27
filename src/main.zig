@@ -11,6 +11,7 @@ const Date = datetime.Date;
 const Time = datetime.Time;
 const event_lib = @import("lib/event.zig");
 const Event = event_lib.Event;
+const EventIterator = event_lib.EventIterator;
 
 const draw = @import("lib/draw.zig");
 const Renderer = draw.Renderer;
@@ -224,7 +225,8 @@ pub fn main() !void {
 
         // Drawing
 
-        try draw.drawWeek(&weekview, events.items, tasks.tasks.items, Date.now());
+        var events_it = try EventIterator.init(events, weekview.start);
+        try draw.drawWeek(&weekview, &events_it, tasks.tasks.items, Date.now());
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);
 

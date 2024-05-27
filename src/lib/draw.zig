@@ -6,6 +6,7 @@ const Weekday = datetime.Weekday;
 const Time = datetime.Time;
 const event_lib = @import("event.zig");
 const Event = event_lib.Event;
+const EventIterator = event_lib.EventIterator;
 const Surface = @import("surface.zig").Surface;
 const WeekView = @import("weekview.zig").WeekView;
 const Task = @import("task.zig").Task;
@@ -200,7 +201,7 @@ pub fn drawTask(wv: *WeekView, task: Task, now: Date) !void {
     try drawSingleTask(wv, task);
 }
 
-pub fn drawWeek(wv: *WeekView, events: []Event, tasks: []Task, now: Date) !void {
+pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Date) !void {
     const renderer = wv.sf.renderer;
     _ = c.SDL_SetRenderTarget(renderer, wv.sf.tex);
     arc.setColor(renderer, background_color);
@@ -215,7 +216,8 @@ pub fn drawWeek(wv: *WeekView, events: []Event, tasks: []Task, now: Date) !void 
         _ = c.SDL_RenderDrawLineF(renderer, x, 0, x, wv.sf.h);
     }
 
-    for (events) |e| {
+    const view_end = wv.start.after(.{ .weeks = 1 });
+    while (events_it.next(view_end)) |e| {
         try drawEvent(wv, e, now);
     }
 

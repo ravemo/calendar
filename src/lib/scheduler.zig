@@ -43,15 +43,6 @@ const IntervalIterator = struct {
     }
 };
 
-pub fn cmpByStartDate(context: void, a: *Task, b: *Task) bool {
-    _ = context;
-    if (b.start) |bd| {
-        if (a.start) |ad| {
-            return ad.isBefore(bd);
-        } else false;
-    } else false;
-}
-
 pub fn cmpByDueDate(context: void, a: Task, b: Task) bool {
     _ = context;
     if (b.due) |bd| {
