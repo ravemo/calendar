@@ -25,8 +25,8 @@ const Task = task.Task;
 const TaskList = task.TaskList;
 const Scheduler = @import("lib/scheduler.zig").Scheduler;
 
-const scrn_w = 800;
-const scrn_h = 600;
+var scrn_w: f32 = 800;
+var scrn_h: f32 = 600;
 
 fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*c]u8) callconv(.C) c_int {
     const events: *std.ArrayList(Event) = @alignCast(@ptrCast(events_ptr));
@@ -100,9 +100,9 @@ pub fn main() !void {
         "Calendar",
         c.SDL_WINDOWPOS_CENTERED,
         c.SDL_WINDOWPOS_CENTERED,
-        scrn_w,
-        scrn_h,
-        c.SDL_WINDOW_SHOWN,
+        @intFromFloat(scrn_w),
+        @intFromFloat(scrn_h),
+        c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE,
     ) orelse sdlPanic();
     defer _ = c.SDL_DestroyWindow(window);
 
@@ -236,6 +236,23 @@ pub fn main() !void {
                     } else {
                         hours_surface.scroll(ev.wheel.preciseY * 20);
                         weekview.sf.scroll(ev.wheel.preciseY * 20);
+                    }
+                },
+                c.SDL_WINDOWEVENT => {
+                    switch (ev.window.event) {
+                        c.SDL_WINDOWEVENT_RESIZED, c.SDL_WINDOWEVENT_SIZE_CHANGED => {
+                            const new_scrn_w = ev.window.data1;
+                            const new_scrn_h = ev.window.data2;
+                            scrn_w = @floatFromInt(new_scrn_w);
+                            scrn_h = @floatFromInt(new_scrn_h);
+                            hours_surface.deinit();
+                            days_surface.deinit();
+                            weekview.deinit();
+                            hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
+                            days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
+                            weekview = WeekView.init(allocator, renderer, scrn_w, scrn_h);
+                        },
+                        else => {},
                     }
                 },
                 else => {},
