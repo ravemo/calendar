@@ -30,7 +30,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
     var id: i32 = undefined;
     var parent: ?i32 = null;
     var name: []const u8 = undefined;
-    var time: Time = undefined;
+    var time: ?Time = null;
     var start: ?Date = null;
     var due: ?Date = null;
     var deps = [_]?i32{null} ** 32;
@@ -52,7 +52,9 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
             if (val) |v|
                 due = Date.fromString(v) catch return -1;
         } else if (std.mem.eql(u8, col, "time")) {
-            time = .{ .seconds = if (val) |v| std.fmt.parseInt(i32, v, 10) catch return -1 else 2 * 60 * 60 };
+            if (val) |v| {
+                time = .{ .seconds = std.fmt.parseInt(i32, v, 10) catch return -1 };
+            }
         } else if (std.mem.eql(u8, col, "status")) {
             if (val != null) return 0; // We don't care about finished tasks for now
         } else if (std.mem.eql(u8, col, "depends")) {
@@ -66,6 +68,14 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
                     std.debug.assert(idx < 32);
                 }
             }
+        } else if (std.mem.eql(u8, col, "tags")) {
+            if (val) |v| {
+                var it = std.mem.splitSequence(u8, v, " ");
+                while (it.next()) |substr| {
+                    if (std.mem.eql(u8, substr, "_group"))
+                        time = .{ .seconds = 0 };
+                }
+            }
         } else {
             if (false) std.debug.print("Unhandled column: {s}\n", .{col});
         }
@@ -75,7 +85,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
         .id = id,
         .parent = parent,
         .name = name,
-        .time = time,
+        .time = time orelse .{ .seconds = 2 * 60 * 60 },
         .start = start,
         .due = due,
         .scheduled_start = null,
