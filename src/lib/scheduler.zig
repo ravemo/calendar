@@ -47,21 +47,21 @@ const IntervalIterator = struct {
                     if (end.isBefore(e.start)) break; // Nothing to do
                     const e_end = e.getEnd();
 
-                    if (e.start.isBefore(start) and end.isBefore(e_end)) {
+                    if (e.start.isBeforeEq(start) and end.isBeforeEq(e_end)) {
                         // --------- | Interval | -----------
                         // ------ |     Event      | --------
                         _ = intervals.orderedRemove(i);
-                    } else if (end.isBefore(e_end) and e.start.isBefore(end)) {
+                    } else if (end.isBeforeEq(e_end) and e.start.isBeforeEq(end)) {
                         // --- | Interval | -----------
                         // ----------| Event | --------
                         interval.end = e.start;
                         i += 1;
-                    } else if (start.isBefore(e_end) and e.start.isBefore(start)) {
+                    } else if (start.isBeforeEq(e_end) and e.start.isBeforeEq(start)) {
                         // --------- | Interval | ----
                         // ------| Event | -----------
                         interval.start = e_end;
                         i += 1;
-                    } else if (start.isBefore(e.start) and e_end.isBefore(end)) {
+                    } else if (start.isBeforeEq(e.start) and e_end.isBeforeEq(end)) {
                         // ----- |   Interval   | -----
                         // ---------| Event | ---------
                         var copy = interval.*;
@@ -82,7 +82,7 @@ const IntervalIterator = struct {
                     if (limit.isBefore(e.start)) break;
                     const e_end = e.getEnd();
 
-                    if (start.isBefore(e.start)) {
+                    if (start.isBeforeEq(e.start)) {
                         // --- | Interval                   -->
                         // ----------| Event | --------
                         var copy = interval.*;
@@ -91,7 +91,7 @@ const IntervalIterator = struct {
                         try intervals.append(copy);
                         i += 1;
                         break;
-                    } else if (e.start.isBefore(start) and start.isBefore(e_end)) {
+                    } else if (e.start.isBeforeEq(start) and start.isBefore(e_end)) {
                         // --------- | Interval                  -->
                         // ------ |     Event      | --------
                         interval.start = e_end;
@@ -113,9 +113,6 @@ const IntervalIterator = struct {
         var cur = &self.intervals.items[0];
         while (true) {
             if (cur.end) |e| {
-                std.debug.print("cur: ", .{});
-                cur.print();
-                std.debug.print("\n", .{});
                 if (e.isBeforeEq(cur.start)) {
                     _ = self.intervals.orderedRemove(0);
                     if (self.intervals.items.len == 0) return null;
@@ -128,6 +125,8 @@ const IntervalIterator = struct {
         // Generate interval to return
         var ret = cur.*;
         ret.end = ret.start.after(step);
+        if (cur.end != null and cur.end.?.isBefore(ret.end.?))
+            ret.end = cur.end;
 
         // Split at day transition
         const day_end = ret.start.after(.{ .days = 1 }).getDayStart();
@@ -189,26 +188,24 @@ pub const Scheduler = struct {
 
         std.mem.sort(Task, unscheduled.tasks.items, {}, cmpByDueDate);
         while (unscheduled.tasks.items.len > 0) {
-            const best_opt = getBestTask(interval, &unscheduled);
-            if (best_opt) |best| {
-                interval = self.intervals.next(best.time) orelse return scheduled;
-                best.scheduled_start = interval.start;
-                if (interval.end) |e| {
-                    if (e.isBefore(best.getEnd().?)) {
-                        var copy = best.*;
-                        copy.time = e.timeSince(interval.start);
-                        best.time = best.time.sub(copy.time);
+            const best = getBestTask(interval, &unscheduled) orelse break;
+            interval = self.intervals.next(best.time) orelse return scheduled;
+            best.scheduled_start = interval.start;
+            if (interval.end) |e| {
+                if (e.isBefore(best.getEnd().?)) {
+                    var copy = best.*;
+                    copy.time = e.timeSince(interval.start);
+                    best.time = best.time.sub(copy.time);
 
-                        try scheduled.tasks.append(copy);
-                    } else {
-                        try scheduled.tasks.append(best.*);
-                        if (!unscheduled.remove(best)) unreachable;
-                    }
+                    try scheduled.tasks.append(copy);
                 } else {
                     try scheduled.tasks.append(best.*);
                     if (!unscheduled.remove(best)) unreachable;
                 }
-            } else break;
+            } else {
+                try scheduled.tasks.append(best.*);
+                if (!unscheduled.remove(best)) unreachable;
+            }
         }
 
         // TODO Merge tasks that start right after another (artifact of spliting
