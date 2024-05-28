@@ -27,9 +27,9 @@ const IntervalIterator = struct {
     intervals: std.ArrayList(Interval),
 
     fn init(allocator: std.mem.Allocator, event_list: []Event, tasks: TaskList) !Self {
+        _ = tasks; // TODO: Break intervals at start dates
         var events = try EventIterator.init(allocator, event_list, Date.now());
         defer events.deinit();
-        _ = tasks; // TODO: Break intervals at start dates
         var intervals = std.ArrayList(Interval).init(allocator);
         try intervals.append(.{ .start = Date.now(), .end = null });
         var i: usize = 0;
@@ -109,6 +109,10 @@ const IntervalIterator = struct {
         };
     }
 
+    fn deinit(self: Self) void {
+        self.intervals.deinit();
+    }
+
     fn next(self: *Self, step: Time) ?Interval {
         var cur = &self.intervals.items[0];
         while (true) {
@@ -177,6 +181,11 @@ pub const Scheduler = struct {
 
     pub fn deinit(self: Self) void {
         self.intervals.deinit();
+    }
+
+    pub fn reset(self: *Self, event_list: []Event, tasks: TaskList) !void {
+        self.intervals.deinit();
+        self.intervals = try IntervalIterator.init(self.allocator, event_list, tasks);
     }
 
     pub fn scheduleTasks(self: *Self, tl: TaskList) !TaskList {

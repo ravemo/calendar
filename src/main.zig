@@ -47,7 +47,7 @@ pub fn main() !void {
         c.SDL_WINDOWPOS_CENTERED,
         @intFromFloat(scrn_w),
         @intFromFloat(scrn_h),
-        c.SDL_WINDOW_SHOWN | c.SDL_WINDOW_RESIZABLE,
+        c.SDL_WINDOW_SHOWN, // | c.SDL_WINDOW_RESIZABLE,
     ) orelse sdlPanic();
     defer _ = c.SDL_DestroyWindow(window);
 
@@ -55,19 +55,27 @@ pub fn main() !void {
     defer _ = c.SDL_DestroyRenderer(renderer);
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
     const normal_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_ARROW);
+    const wait_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_WAIT);
     const hand_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_HAND);
     const sizens_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_SIZENS);
 
     wakeEvent = c.SDL_RegisterEvents(1);
 
     var events_db = try Database.init("calendar.db");
+    defer events_db.deinit();
     // TODO: Use proper user_data_dir-like function when releasing to the public
     const tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
+    defer tasks_db.deinit();
     const events = try event_lib.loadEvents(allocator, events_db);
-    var base_tasks = try TaskList.init(allocator, tasks_db);
-    try base_tasks.sanitize();
+    const base_tasks = blk: {
+        var unsanitized = try TaskList.init(allocator, tasks_db);
+        try unsanitized.sanitize();
+        break :blk unsanitized;
+    };
+
     var scheduler = try Scheduler.init(allocator, events.items, base_tasks);
-    const tasks = try scheduler.scheduleTasks(base_tasks);
+    defer scheduler.deinit();
+    var tasks = try scheduler.scheduleTasks(base_tasks);
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
     var days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
@@ -99,6 +107,8 @@ pub fn main() !void {
         wake_event.type = wakeEvent;
         _ = c.SDL_PushEvent(&wake_event);
     }
+
+    var update = false;
     mainLoop: while (true) {
         // Control
         var ev: c.SDL_Event = undefined;
@@ -118,6 +128,7 @@ pub fn main() !void {
                         }
                     },
                     c.SDL_SCANCODE_LSHIFT => holding_shift = true,
+                    c.SDL_SCANCODE_F5 => update = true,
                     else => {
                         std.debug.print("Unhandled key: {}\n", .{ev.key.keysym.scancode});
                     },
@@ -209,6 +220,14 @@ pub fn main() !void {
                 else => {},
             }
             if (c.SDL_PollEvent(&ev) == 0) break;
+        }
+
+        if (update) {
+            c.SDL_SetCursor(wait_cursor);
+            try scheduler.reset(events.items, base_tasks);
+            tasks = try scheduler.scheduleTasks(base_tasks);
+            c.SDL_SetCursor(normal_cursor);
+            update = false;
         }
 
         // Drawing
