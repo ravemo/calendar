@@ -28,6 +28,7 @@ const Scheduler = @import("lib/scheduler.zig").Scheduler;
 var scrn_w: f32 = 800;
 var scrn_h: f32 = 600;
 
+var wakeEvent: u32 = undefined;
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
@@ -52,12 +53,12 @@ pub fn main() !void {
 
     const renderer = c.SDL_CreateRenderer(window, -1, c.SDL_RENDERER_ACCELERATED | c.SDL_RENDERER_PRESENTVSYNC) orelse sdlPanic();
     defer _ = c.SDL_DestroyRenderer(renderer);
-
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
-
     const normal_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_ARROW);
     const hand_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_HAND);
     const sizens_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_SIZENS);
+
+    wakeEvent = c.SDL_RegisterEvents(1);
 
     var events_db = try Database.init("calendar.db");
     // TODO: Use proper user_data_dir-like function when releasing to the public
@@ -93,11 +94,17 @@ pub fn main() !void {
 
     var holding_shift = false;
 
+    {
+        var wake_event = std.mem.zeroes(c.SDL_Event);
+        wake_event.type = wakeEvent;
+        _ = c.SDL_PushEvent(&wake_event);
+    }
     mainLoop: while (true) {
         // Control
         var ev: c.SDL_Event = undefined;
 
-        while (c.SDL_PollEvent(&ev) != 0) {
+        _ = c.SDL_WaitEvent(&ev);
+        while (true) {
             switch (ev.type) {
                 c.SDL_QUIT => break :mainLoop,
                 c.SDL_KEYDOWN => switch (ev.key.keysym.scancode) {
@@ -201,6 +208,7 @@ pub fn main() !void {
                 },
                 else => {},
             }
+            if (c.SDL_PollEvent(&ev) == 0) break;
         }
 
         // Drawing
