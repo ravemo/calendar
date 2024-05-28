@@ -16,6 +16,10 @@ pub const Surface = struct {
     w: f32,
     h: f32,
 
+    sx: f32,
+    sy: f32,
+    zoom: f32,
+
     pub fn init(renderer: Renderer, x: f32, y: f32, w: f32, h: f32) Self {
         return .{
             .renderer = renderer,
@@ -30,6 +34,9 @@ pub const Surface = struct {
             .y = y,
             .w = w,
             .h = h,
+            .sx = 0,
+            .sy = 0,
+            .zoom = 1,
         };
     }
 
@@ -44,6 +51,18 @@ pub const Surface = struct {
             .w = @intFromFloat(self.w),
             .h = @intFromFloat(self.h),
         };
+    }
+
+    pub fn zoomIn(self: *Self, zoom_amount: f32) void {
+        self.zoom += zoom_amount;
+        if (self.zoom < 0) self.zoom = 0;
+    }
+    pub fn scroll(self: *Self, scroll_amount: f32) void {
+        const z = 1 / self.getScale();
+        self.sy = @max(@min(self.sy + scroll_amount, 0), -self.h * (z - 1));
+    }
+    pub fn getScale(self: Self) f32 {
+        return @exp(-self.zoom / 50.0);
     }
 
     pub fn draw(self: Self) void {

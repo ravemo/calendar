@@ -131,11 +131,23 @@ pub fn main() !void {
     defer days_surface.deinit();
     defer weekview.deinit();
 
+    {
+        const initial_zoom: f32 = 30;
+        hours_surface.zoomIn(initial_zoom);
+        weekview.sf.zoomIn(initial_zoom);
+        const z = 1 / hours_surface.getScale();
+        const sy = z * draw.yFromHour(Date.now().getHourF(), hours_surface.h) - hours_surface.h / 2;
+        hours_surface.scroll(-sy);
+        weekview.sf.scroll(-sy);
+    }
+
     var dragging_event: ?*Event = null;
     var is_dragging_end = false; // Whether you are dragging the start of the event or the end
     var original_dragging_event: ?Event = null;
     var dragging_start_x: i32 = undefined;
     var dragging_start_y: i32 = undefined;
+
+    var holding_shift = false;
 
     mainLoop: while (true) {
         // Control
@@ -154,9 +166,14 @@ pub fn main() !void {
                             weekview.start = weekview.start.after(.{ .weeks = d_weeks });
                         }
                     },
+                    c.SDL_SCANCODE_LSHIFT => holding_shift = true,
                     else => {
                         std.debug.print("Unhandled key: {}\n", .{ev.key.keysym.scancode});
                     },
+                },
+                c.SDL_KEYUP => switch (ev.key.keysym.scancode) {
+                    c.SDL_SCANCODE_LSHIFT => holding_shift = false,
+                    else => {},
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
                     if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
@@ -210,6 +227,15 @@ pub fn main() !void {
                         } else {
                             c.SDL_SetCursor(normal_cursor);
                         }
+                    }
+                },
+                c.SDL_MOUSEWHEEL => {
+                    if (holding_shift) {
+                        hours_surface.zoomIn(ev.wheel.preciseY);
+                        weekview.sf.zoomIn(ev.wheel.preciseY);
+                    } else {
+                        hours_surface.scroll(ev.wheel.preciseY * 20);
+                        weekview.sf.scroll(ev.wheel.preciseY * 20);
                     }
                 },
                 else => {},

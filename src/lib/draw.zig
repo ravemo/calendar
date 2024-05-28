@@ -28,11 +28,12 @@ const event_color = arc.colorFromHex(0x1f842188);
 const task_color = arc.colorFromHex(0x22accc88);
 
 pub fn drawGrid(sf: Surface) void {
+    const z = 1 / sf.getScale();
     const renderer = sf.renderer;
     const grid_count_h: usize = @intFromFloat(@ceil(sf.h / 12));
     arc.setColor(renderer, grid_color);
     for (0..grid_count_h) |i| {
-        const y: f32 = @as(f32, @floatFromInt(i)) * sf.h / 48;
+        const y: f32 = z * @as(f32, @floatFromInt(i)) * sf.h / 48;
         _ = c.SDL_RenderDrawLineF(renderer, 0, y, sf.w, y);
     }
 }
@@ -81,10 +82,11 @@ pub fn drawSingleEvent(wv: *WeekView, event: Event) !void {
     if (wv.getEnd().isBefore(draw_event.getEnd()))
         draw_event.duration = wv.getEnd().timeSince(draw_event.start);
 
-    const h = draw_event.duration.getHoursF();
+    const z = 1 / wv.sf.getScale();
+    const h = z * draw_event.duration.getHoursF();
 
     const x = xFromWeekday(draw_event.start.getWeekday(), wv.sf.w) + 3;
-    const y = yFromHour(draw_event.start.getHourF(), wv.sf.h);
+    const y = z * yFromHour(draw_event.start.getHourF(), wv.sf.h) + wv.sf.sy;
     arc.setColor(renderer, event_color);
     const rect = c.SDL_FRect{
         .x = x,
@@ -105,10 +107,7 @@ pub fn drawEvent(wv: *WeekView, event: Event, now: Date) !void {
     const view_end = wv.start.after(.{ .weeks = 1 });
 
     if (event.repeat) |repeat| {
-        // if the event starts repeating after the week view, do nothing
-
         const repeat_end = repeat.end orelse view_end;
-
         switch (repeat.period) {
             .time => |t| {
                 var iterator = DateIter.init(view_start, repeat_end);
@@ -156,10 +155,11 @@ pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
         draw_task.time = wv.getEnd().timeSince(draw_start.*);
     // TODO: Check if task is visible inside week view
 
-    const h = draw_task.time.getHoursF();
+    const z = 1 / wv.sf.getScale();
+    const h = z * draw_task.time.getHoursF();
 
     const x = xFromWeekday(draw_start.getWeekday(), wv.sf.w) + 3;
-    const y = yFromHour(draw_start.getHourF(), wv.sf.h);
+    const y = z * yFromHour(draw_start.getHourF(), wv.sf.h) + wv.sf.sy;
     arc.setColor(renderer, task_color);
     const rect = c.SDL_FRect{
         .x = x,
@@ -219,9 +219,10 @@ pub fn drawHours(sf: Surface, now: Date) void {
     drawGrid(sf);
 
     arc.setColor(renderer, text_color);
-    const sep = sf.h / 24;
+    const z = 1 / sf.getScale();
+    const sep = z * sf.h / 24;
     for (0..24) |i| {
-        const y: f32 = sep * @as(f32, @floatFromInt(i));
+        const y: f32 = sep * @as(f32, @floatFromInt(i)) + sf.sy;
         var buf: [6:0]u8 = undefined;
         buf = std.mem.bytesToValue([6:0]u8, std.fmt.bufPrintZ(&buf, "{}:00", .{i}) catch "error");
         text.drawText(renderer, &buf, sf.w - 10, y + sep / 2, -1, .Right, .Center);
@@ -229,7 +230,7 @@ pub fn drawHours(sf: Surface, now: Date) void {
 
     arc.setColor(renderer, divider_color);
     for (0..24) |i| {
-        const y: f32 = sep * @as(f32, @floatFromInt(i));
+        const y: f32 = sep * @as(f32, @floatFromInt(i)) + sf.sy;
         _ = c.SDL_RenderDrawLineF(renderer, 0, y, sf.w, y);
     }
     _ = c.SDL_SetRenderTarget(renderer, null);
