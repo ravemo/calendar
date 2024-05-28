@@ -146,10 +146,10 @@ const IntervalIterator = struct {
 pub fn cmpByDueDate(context: void, a: Task, b: Task) bool {
     _ = context;
     if (b.due) |bd| {
-        if (a.due) |ad| {
-            return ad.isBefore(bd);
-        } else return false;
-    } else return false;
+        return if (a.due) |ad| return ad.isBefore(bd) else false;
+    } else if (a.due) |_| {
+        return true;
+    } else return a.id < b.id;
 }
 
 fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
