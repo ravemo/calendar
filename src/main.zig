@@ -139,7 +139,7 @@ pub fn main() !void {
                 c.SDL_MOUSEBUTTONDOWN => {
                     if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
                         for (events.items) |*e| {
-                            if (e.id != er.evid) continue;
+                            if (e.id != er.id) continue;
                             dragging_start_x = ev.button.x;
                             dragging_start_y = ev.button.y;
                             dragging_event = e;

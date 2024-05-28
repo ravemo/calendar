@@ -33,7 +33,7 @@ pub fn drawGrid(sf: Surface) void {
     const grid_count_h: usize = @intFromFloat(@ceil(sf.h / 12));
     arc.setColor(renderer, grid_color);
     for (0..grid_count_h) |i| {
-        const y: f32 = z * @as(f32, @floatFromInt(i)) * sf.h / 48;
+        const y: f32 = z * @as(f32, @floatFromInt(i)) * sf.h / 48 + sf.sy;
         _ = c.SDL_RenderDrawLineF(renderer, 0, y, sf.w, y);
     }
 }
@@ -91,12 +91,12 @@ pub fn drawSingleEvent(wv: *WeekView, event: Event) !void {
     const rect = c.SDL_FRect{
         .x = x,
         .y = y,
-        .w = wv.sf.w / 7 - 6,
+        .w = wv.sf.w / 7 - 5,
         .h = h * wv.sf.h / 24,
     };
     _ = c.SDL_RenderFillRectF(renderer, &rect);
 
-    try wv.eventRects.append(.{ .evid = draw_event.id, .rect = rect });
+    try wv.eventRects.append(.{ .id = draw_event.id, .rect = rect });
 
     arc.setColor(renderer, text_color);
     text.drawText(renderer, draw_event.name, x + 2, y + 2, rect.w - 4, .Left, .Top);
@@ -164,10 +164,11 @@ pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
     const rect = c.SDL_FRect{
         .x = x,
         .y = y + 1,
-        .w = wv.sf.w / 7 - 6,
+        .w = wv.sf.w / 7 - 5,
         .h = h * wv.sf.h / 24 - 1,
     };
     _ = c.SDL_RenderFillRectF(renderer, &rect);
+    try wv.taskRects.append(.{ .id = draw_task.id, .rect = rect });
 
     arc.setColor(renderer, text_color);
     if (rect.h > 20)
@@ -187,7 +188,7 @@ pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Da
     _ = c.SDL_SetRenderTarget(renderer, wv.sf.tex);
     arc.setColor(renderer, background_color);
     _ = c.SDL_RenderClear(renderer);
-    wv.clearEventRects();
+    wv.clearIdRects();
 
     drawGrid(wv.sf);
 

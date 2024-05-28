@@ -17,6 +17,7 @@ pub const Task = struct {
     // TODO: repeat info
     scheduled_start: ?Date,
     // TODO: Tasks should be able to be split, so we need scheduled_time
+    deps: [32]?i32,
 
     pub fn getEnd(self: Self) ?Date {
         return if (self.scheduled_start) |s| s.after(self.time) else self.due;
@@ -32,6 +33,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
     var time: Time = undefined;
     var start: ?Date = null;
     var due: ?Date = null;
+    var deps = [_]?i32{null} ** 32;
 
     for (0..@intCast(argc)) |i| {
         const col = std.mem.span(cols[i]);
@@ -53,6 +55,17 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
             time = .{ .seconds = if (val) |v| std.fmt.parseInt(i32, v, 10) catch return -1 else 2 * 60 * 60 };
         } else if (std.mem.eql(u8, col, "status")) {
             if (val != null) return 0; // We don't care about finished tasks for now
+        } else if (std.mem.eql(u8, col, "depends")) {
+            if (val) |v| {
+                var it = std.mem.splitSequence(u8, v, " ");
+                var idx: usize = 0;
+                while (it.next()) |substr| {
+                    if (std.mem.trim(u8, substr, " ").len == 0) continue;
+                    deps[idx] = std.fmt.parseInt(i32, substr, 10) catch return -1;
+                    idx += 1;
+                    std.debug.assert(idx < 32);
+                }
+            }
         } else {
             if (false) std.debug.print("Unhandled column: {s}\n", .{col});
         }
@@ -66,6 +79,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
         .start = start,
         .due = due,
         .scheduled_start = null,
+        .deps = deps,
     }) catch return -1;
     return 0;
 }
@@ -91,14 +105,31 @@ pub const TaskList = struct {
         self.tasks.deinit();
     }
 
-    pub fn getParent(self: Self, task: Task) !?*Task {
-        if (task.parent == null) return null;
+    pub fn getById(self: Self, id: i32) ?*Task {
         for (self.tasks.items) |*t| {
-            if (t.id == task.parent) return t;
+            if (t.id == id) return t;
         }
-        return error.InvalidParent;
+        return null;
+    }
+
+    pub fn getParent(self: Self, task: Task) !?*Task {
+        return if (task.parent) |p|
+            self.getById(p) orelse error.InvalidParent
+        else
+            null;
     }
     pub fn sanitize(self: *Self) !void {
+        // Remove all dependencies that have been completed
+        for (self.tasks.items) |*t| {
+            for (&t.deps) |*d| {
+                if (d.* == null) continue;
+                // TODO: rather than just setting to null, swap with last non-null
+                // first. This way we can always break on null rather than having
+                // to continue and iterate over all 32 deps
+                if (self.getById(d.*.?) == null) d.* = null;
+            }
+        }
+
         // Remove all subtasks that haven't been completed but whose parents have
         var changed = true;
         while (changed) {
@@ -152,7 +183,11 @@ pub const TaskList = struct {
         // completed as well.
         // Starts by dependencies first, and then by children
 
-        // TODO: Handle dependencies
+        for (task.deps) |d| {
+            if (d == null) continue;
+            if (self.getById(d.?)) |ret| return ret;
+        }
+
         for (self.tasks.items) |*t| {
             if (t.parent == task.id) {
                 if (t.start != null and at_time.isBefore(t.start.?)) continue;
