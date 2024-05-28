@@ -36,7 +36,6 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
     var start: Date = undefined;
     var end: Date = undefined;
     var has_repeat = false;
-    var r_start: ?Date = null;
     var r_end: ?Date = null;
     var repeat: ?datetime.RepeatInfo = null;
     repeat = repeat;
@@ -48,16 +47,12 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
             id = std.fmt.parseInt(i32, val.?, 10) catch return -1;
         } else if (std.mem.eql(u8, col, "Name")) {
             name = allocator.dupe(u8, val.?) catch return -1;
-        } else if (std.mem.eql(u8, col, "E_Start")) {
+        } else if (std.mem.eql(u8, col, "Start")) {
             start = Date.fromString(val.?) catch return -1;
         } else if (std.mem.eql(u8, col, "E_End")) {
             end = datetime.Date.fromString(val.?) catch return -1;
         } else if (std.mem.eql(u8, col, "Repeat")) {
             if (val != null) has_repeat = true;
-        } else if (std.mem.eql(u8, col, "R_Start")) {
-            if (val) |v| {
-                r_start = Date.fromString(v) catch return -1;
-            }
         } else if (std.mem.eql(u8, col, "R_End")) {
             if (val) |v|
                 r_end = Date.fromString(v) catch return -1;
@@ -69,7 +64,6 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
 
     if (has_repeat) std.debug.assert(repeat != null);
     if (repeat) |*r| {
-        r.start = r_start;
         r.end = r_end;
     }
     events.append(Event.init(allocator, id, name, start, end.timeSince(start), repeat) catch return -1) catch return -1;
@@ -80,8 +74,7 @@ fn loadEvents(allocator: std.mem.Allocator, db: Database) !std.ArrayList(Event) 
     var events = std.ArrayList(Event).init(allocator);
     const query = try std.fmt.allocPrintZ(allocator,
         \\ SELECT Events.Id as E_Id, Repeats.Id as R_Id,
-        \\        Events.Start as E_Start, Events.End as E_End,
-        \\        Repeats.Start as R_Start, Repeats.End as R_End, *
+        \\        Events.End as E_End, Repeats.End as R_End, *
         \\ FROM Events LEFT JOIN Repeats ON Events.Repeat = Repeats.Id;
     , .{});
     defer allocator.free(query);

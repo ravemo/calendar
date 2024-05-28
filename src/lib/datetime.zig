@@ -483,10 +483,9 @@ pub const Period = union(enum) {
 pub const RepeatInfo = struct {
     const Self = @This();
     period: Period,
-    start: ?Date = null,
     end: ?Date = null,
     pub fn fromString(str: [:0]const u8) StringError!RepeatInfo {
-        const pattern = "every (?'period'.*),?(?: from (?'start'.*))?,?(?: until (?'end'.*))?";
+        const pattern = "every (?'period'.*),?(?: until (?'end'.*))?";
 
         const re = try Regex.compile(pattern);
         defer re.deinit();
@@ -495,15 +494,13 @@ pub const RepeatInfo = struct {
 
         const RepeatPart = enum {
             Period,
-            Start,
             End,
         };
         const parts = [_]struct { str: [:0]const u8, val: RepeatPart }{
             .{ .str = "period", .val = .Period },
-            .{ .str = "start", .val = .Start },
             .{ .str = "end", .val = .End },
         };
-        var info = RepeatInfo{ .period = undefined, .start = undefined };
+        var info = RepeatInfo{ .period = undefined };
         for (parts) |part| {
             const name = part.str;
             const v = part.val;
@@ -511,7 +508,6 @@ pub const RepeatInfo = struct {
             defer cap.deinitMatch(substring);
             switch (v) {
                 .Period => info.period = try Period.fromString(substring.?),
-                .Start => info.start = if (substring) |substr| try Date.fromString(substr) else null,
                 .End => info.end = if (substring) |substr| try Date.fromString(substr) else null,
             }
         }
@@ -519,14 +515,11 @@ pub const RepeatInfo = struct {
     }
     pub fn toString(self: Self, allocator: std.mem.Allocator) ![]const u8 {
         const period_str = self.period.toString(allocator);
-        const start_str = self.start.toString(allocator);
         const end_str = if (self.end) |e| e.toString(allocator) else null;
         defer allocator.free(period_str);
-        defer allocator.free(start_str);
         defer allocator.free(end_str);
-        return std.fmt.allocPrint(allocator, "{s}\n{s}\n{?s}", .{
+        return std.fmt.allocPrint(allocator, "{s}\n{?s}", .{
             period_str,
-            start_str,
             end_str,
         });
     }

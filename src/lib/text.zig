@@ -21,7 +21,7 @@ pub fn drawText(renderer: anytype, label: []const u8, x: f32, y: f32, max_w: f32
     drawTextZ(renderer, new_label, x, y, max_w, h_align, v_align);
 }
 pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, max_w: f32, h_align: HAlignment, v_align: VAlignment) void {
-    const size = 16;
+    const size = 12;
 
     const font = c.TTF_OpenFont("data/Mecha.ttf", size);
     defer c.TTF_CloseFont(font);

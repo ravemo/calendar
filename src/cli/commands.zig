@@ -135,19 +135,10 @@ const RepeatCmd = struct {
     pub fn execute(self: Self, allocator: std.mem.Allocator, db: Database) !void {
         const period = try self.repeat_info.period.toString(allocator);
         defer allocator.free(period);
-        const start_def = if (self.repeat_info.start) |s| try s.toString(allocator) else null;
-        defer if (start_def) |s| allocator.free(s);
         const end_def = if (self.repeat_info.end) |e| try e.toString(allocator) else null;
         defer if (end_def) |s| allocator.free(s);
 
         // TODO use parametrized query instead of having this spaghetti
-        const start = if (start_def) |s|
-            try std.fmt.allocPrintZ(allocator, "'{s}'", .{s})
-        else
-            "NULL";
-        defer if (!std.mem.eql(u8, start, "NULL"))
-            allocator.free(start);
-
         const end = if (end_def) |s|
             try std.fmt.allocPrintZ(allocator, "'{s}'", .{s})
         else
@@ -157,8 +148,8 @@ const RepeatCmd = struct {
 
         const create_repeat_query = try std.fmt.allocPrintZ(
             allocator,
-            "INSERT INTO Repeats(Period, Start, End) VALUES('{s}', {s}, {s})",
-            .{ period, start, end },
+            "INSERT INTO Repeats(Period, End) VALUES('{s}', {s})",
+            .{ period, end },
         );
         defer allocator.free(create_repeat_query);
         try db.execute(create_repeat_query);
