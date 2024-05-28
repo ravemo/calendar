@@ -29,6 +29,14 @@ var scrn_w: f32 = 800;
 var scrn_h: f32 = 600;
 
 var wakeEvent: u32 = undefined;
+fn resetZoom(sf: *Surface) void {
+    sf.zoom = 0;
+    sf.zoomIn(60);
+    sf.sy = 0;
+    const z = 1 / sf.getScale();
+    const sy = z * draw.yFromHour(Date.now().getHourF(), sf.h) - sf.h / 2;
+    sf.scroll(-sy);
+}
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
@@ -82,15 +90,8 @@ pub fn main() !void {
     defer days_surface.deinit();
     defer weekview.deinit();
 
-    {
-        const initial_zoom: f32 = 30;
-        hours_surface.zoomIn(initial_zoom);
-        weekview.sf.zoomIn(initial_zoom);
-        const z = 1 / hours_surface.getScale();
-        const sy = z * draw.yFromHour(Date.now().getHourF(), hours_surface.h) - hours_surface.h / 2;
-        hours_surface.scroll(-sy);
-        weekview.sf.scroll(-sy);
-    }
+    resetZoom(&hours_surface);
+    resetZoom(&weekview.sf);
 
     var dragging_event: ?*Event = null;
     var is_dragging_end = false; // Whether you are dragging the start of the event or the end
@@ -192,8 +193,8 @@ pub fn main() !void {
                 },
                 c.SDL_MOUSEWHEEL => {
                     if (holding_shift) {
-                        hours_surface.zoomIn(ev.wheel.preciseY);
-                        weekview.sf.zoomIn(ev.wheel.preciseY);
+                        hours_surface.zoomIn(ev.wheel.preciseY * 3);
+                        weekview.sf.zoomIn(ev.wheel.preciseY * 3);
                     } else {
                         hours_surface.scroll(ev.wheel.preciseY * 20);
                         weekview.sf.scroll(ev.wheel.preciseY * 20);
@@ -228,6 +229,8 @@ pub fn main() !void {
             try base_tasks.sanitize();
             try scheduler.reset(events.items, base_tasks);
             tasks = try scheduler.scheduleTasks(base_tasks);
+            resetZoom(&hours_surface);
+            resetZoom(&weekview.sf);
             c.SDL_SetCursor(normal_cursor);
             update = false;
         }

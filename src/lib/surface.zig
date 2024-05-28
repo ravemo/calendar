@@ -54,8 +54,12 @@ pub const Surface = struct {
     }
 
     pub fn zoomIn(self: *Self, zoom_amount: f32) void {
+        const old_z = self.getScale();
         self.zoom += zoom_amount;
         if (self.zoom < 0) self.zoom = 0;
+        const z = self.getScale();
+        self.sy = (self.sy - self.h / 2) * (old_z / z) + self.h / 2;
+        self.scroll(0); // update sy if it gets out of bounds
     }
     pub fn scroll(self: *Self, scroll_amount: f32) void {
         const z = 1 / self.getScale();
