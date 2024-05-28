@@ -67,11 +67,9 @@ pub fn main() !void {
     const tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
     defer tasks_db.deinit();
     const events = try event_lib.loadEvents(allocator, events_db);
-    const base_tasks = blk: {
-        var unsanitized = try TaskList.init(allocator, tasks_db);
-        try unsanitized.sanitize();
-        break :blk unsanitized;
-    };
+    var base_tasks = try TaskList.init(allocator, tasks_db);
+    defer base_tasks.deinit();
+    try base_tasks.sanitize();
 
     var scheduler = try Scheduler.init(allocator, events.items, base_tasks);
     defer scheduler.deinit();
@@ -159,14 +157,15 @@ pub fn main() !void {
                     if (dragging_event) |ev_ptr| {
                         const x0 = weekview.sf.x;
                         const y0 = weekview.sf.y;
+                        const scale = weekview.sf.getScale();
                         const mx: f32 = @floatFromInt(ev.motion.x);
                         const my: f32 = @floatFromInt(ev.motion.y);
                         const oev = original_dragging_event.?;
                         const new_day = draw.weekdayFromX(mx - x0, weekview.sf.w);
-                        const new_hr = draw.hourFromY(my - y0, weekview.sf.h);
+                        const new_hr = scale * draw.hourFromY(my - y0, weekview.sf.h);
 
                         const old_day = draw.weekdayFromX(@as(f32, @floatFromInt(dragging_start_x)) - x0, weekview.sf.w);
-                        const old_hr = draw.hourFromY(@as(f32, @floatFromInt(dragging_start_y)) - y0, weekview.sf.h);
+                        const old_hr = scale * draw.hourFromY(@as(f32, @floatFromInt(dragging_start_y)) - y0, weekview.sf.h);
 
                         const d_day: i32 = new_day - old_day;
                         var d_hr: f32 = new_hr - old_hr;
@@ -224,6 +223,9 @@ pub fn main() !void {
 
         if (update) {
             c.SDL_SetCursor(wait_cursor);
+            base_tasks.deinit();
+            base_tasks = try TaskList.init(allocator, tasks_db);
+            try base_tasks.sanitize();
             try scheduler.reset(events.items, base_tasks);
             tasks = try scheduler.scheduleTasks(base_tasks);
             c.SDL_SetCursor(normal_cursor);

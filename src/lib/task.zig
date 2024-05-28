@@ -87,6 +87,10 @@ pub const TaskList = struct {
         return .{ .tasks = tasks, .allocator = allocator };
     }
 
+    pub fn deinit(self: Self) void {
+        self.tasks.deinit();
+    }
+
     pub fn getParent(self: Self, task: Task) !?*Task {
         if (task.parent == null) return null;
         for (self.tasks.items) |*t| {
