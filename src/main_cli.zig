@@ -33,13 +33,10 @@ pub fn main() !void {
         const cmd_general = try commands.initCmd(allocator, input);
         defer cmd_general.deinit();
         switch (cmd_general) {
-            .add => |cmd| {
-                try cmd.execute(allocator, db, &ln);
-            },
+            .add => |cmd| try cmd.execute(allocator, &db, &ln),
+            .repeat => |cmd| try cmd.execute(allocator, &db),
+            inline else => |cmd| try cmd.execute(&db),
             .quit => break,
-            inline else => |cmd| {
-                try cmd.execute(allocator, db);
-            },
         }
     }
 }

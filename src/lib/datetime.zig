@@ -479,6 +479,11 @@ pub const Period = union(enum) {
             inline else => |x| x.toString(allocator),
         };
     }
+    pub fn toStringZ(self: Period, allocator: std.mem.Allocator) ![:0]const u8 {
+        const normal = try self.toString(allocator);
+        defer allocator.free(normal);
+        return allocator.dupeZ(u8, normal);
+    }
 };
 pub const RepeatInfo = struct {
     const Self = @This();

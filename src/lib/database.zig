@@ -60,37 +60,54 @@ pub const Database = struct {
         return @intCast(c.sqlite3_last_insert_rowid(self.db));
     }
 
-    pub fn updateEvent(self: *Self, allocator: std.mem.Allocator, e: Event) !void {
+    pub fn prepare(self: *Self, query: [:0]const u8) !void {
         var tail: [*c]u8 = undefined;
-        const query = "UPDATE Events SET Start=?, End=? WHERE Id=?;";
         if (c.sqlite3_prepare_v2(self.db, query, @intCast(query.len), &self.res, &tail) != c.SQLITE_OK) {
             print("Can't retrieve data: {s}\n", .{c.sqlite3_errmsg(self.db)});
             return error.CantRetrieve;
         }
+    }
 
-        const start_string = try e.start.toStringZ(allocator);
-        const end_string = try e.getEnd().toStringZ(allocator);
-        defer allocator.free(start_string);
-        defer allocator.free(end_string);
-
-        if (c.sqlite3_bind_text(self.res, 1, start_string, @intCast(start_string.len), c.SQLITE_STATIC) != c.SQLITE_OK) {
-            std.debug.print("Couldn't bind variable 1\n", .{});
+    pub fn bindText(self: Self, idx: i32, text: []const u8) !void {
+        if (c.sqlite3_bind_text(self.res, idx, @ptrCast(text), @intCast(text.len), c.SQLITE_STATIC) != c.SQLITE_OK) {
+            std.debug.print("Couldn't bind variable {}\n", .{idx});
             return error.BindError;
         }
-        if (c.sqlite3_bind_text(self.res, 2, end_string, @intCast(start_string.len), c.SQLITE_STATIC) != c.SQLITE_OK) {
-            std.debug.print("Couldn't bind variable 2\n", .{});
-            return error.BindError;
-        }
-        if (c.sqlite3_bind_int(self.res, 3, e.id) != c.SQLITE_OK) {
-            std.debug.print("Couldn't bind variable 3\n", .{});
-            return error.BindError;
-        }
+    }
 
+    pub fn bindInt(self: Self, idx: i32, int: i32) !void {
+        if (c.sqlite3_bind_int(self.res, idx, int) != c.SQLITE_OK) {
+            std.debug.print("Couldn't bind variable {}\n", .{idx});
+            return error.BindError;
+        }
+    }
+
+    pub fn bindNull(self: Self, idx: i32) !void {
+        if (c.sqlite3_bind_null(self.res, idx) != c.SQLITE_OK) {
+            std.debug.print("Couldn't bind variable {}\n", .{idx});
+            return error.BindError;
+        }
+    }
+
+    pub fn executeAndFinish(self: Self) !void {
         if (c.sqlite3_step(self.res) != c.SQLITE_DONE) {
             std.debug.print("Couldn't execute query\n", .{});
             return error.StepError;
         }
         _ = c.sqlite3_reset(self.res);
         _ = c.sqlite3_clear_bindings(self.res);
+    }
+
+    pub fn updateEvent(self: *Self, allocator: std.mem.Allocator, e: Event) !void {
+        const start_string = try e.start.toStringZ(allocator);
+        const end_string = try e.getEnd().toStringZ(allocator);
+        defer allocator.free(start_string);
+        defer allocator.free(end_string);
+
+        try self.prepare("UPDATE Events SET Start=?, End=? WHERE Id=?;");
+        try self.bindText(1, start_string);
+        try self.bindText(2, end_string);
+        try self.bindInt(3, e.id);
+        try self.executeAndFinish();
     }
 };
