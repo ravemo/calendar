@@ -159,10 +159,9 @@ fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
         return null;
     }
     for (tasks.tasks.items) |*t| {
-        if (t.start) |s| {
-            if (interval.start.isBefore(s)) continue;
-        }
-        return tasks.getFirstTask(t, interval.start);
+        if (t.start != null and interval.start.isBefore(t.start.?)) continue;
+        if (tasks.getFirstTask(t, interval.start)) |ret|
+            return ret;
     }
 
     return null;
@@ -196,8 +195,8 @@ pub const Scheduler = struct {
         // TODO Split intervals based on start dates of tasks
         var interval = self.intervals.intervals.items[0];
 
-        std.mem.sort(Task, unscheduled.tasks.items, {}, cmpByDueDate);
         while (unscheduled.tasks.items.len > 0) {
+            std.mem.sort(Task, unscheduled.tasks.items, {}, cmpByDueDate);
             const best = getBestTask(interval, &unscheduled) orelse break;
             interval = self.intervals.next(best.time) orelse return scheduled;
             best.scheduled_start = interval.start;

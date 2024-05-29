@@ -188,23 +188,30 @@ pub const TaskList = struct {
         return free;
     }
 
-    pub fn getFirstTask(self: Self, task: *Task, at_time: Date) *Task {
+    pub fn getFirstTask(self: Self, task: *Task, at_time: Date) ?*Task {
         // Return first task that needs to be completed for this task to be
         // completed as well.
         // Starts by dependencies first, and then by children
 
         for (task.deps) |d| {
             if (d == null) continue;
-            if (self.getById(d.?)) |ret| return ret;
-        }
-
-        for (self.tasks.items) |*t| {
-            if (t.parent == task.id) {
-                if (t.start != null and at_time.isBefore(t.start.?)) continue;
+            if (self.getById(d.?)) |t| {
+                if (t.start != null and at_time.isBefore(t.start.?)) return null;
                 return self.getFirstTask(t, at_time);
             }
         }
-        return task;
+
+        var has_pending_children = false;
+        for (self.tasks.items) |*t| {
+            if (t.parent == task.id) {
+                if (t.start != null and at_time.isBefore(t.start.?)) {
+                    has_pending_children = true;
+                    continue;
+                }
+                return self.getFirstTask(t, at_time);
+            }
+        }
+        return if (has_pending_children) null else task;
     }
 
     pub fn remove(self: *Self, to_remove: *Task) bool {
