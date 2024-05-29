@@ -137,6 +137,11 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
     if (has_repeat) std.debug.assert(repeat != null);
     if (repeat) |*r| r.end = r_end;
 
+    if (end.isBefore(start)) {
+        std.debug.print("Warning: Ignoring event ID {} with negative duration\n", .{id});
+        return 0;
+    }
+
     events.append(Event.init(allocator, id, name, start, end.timeSince(start), repeat) catch return -1) catch return -1;
     return 0;
 }

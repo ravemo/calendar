@@ -38,7 +38,7 @@ const IntervalIterator = struct {
         while (i < intervals.items.len) {
             if (e_opt == null) break;
             const interval = &intervals.items[i];
-            const start = interval.start;
+            var start = interval.start;
             if (limit.isBefore(start)) break;
 
             if (interval.end) |end| {
@@ -95,6 +95,7 @@ const IntervalIterator = struct {
                         // --------- | Interval                  -->
                         // ------ |     Event      | --------
                         interval.start = e_end;
+                        start = interval.start;
                     } else {
                         // Interval is after event; iterate over events to catch up
                         e_opt = events.next(limit);

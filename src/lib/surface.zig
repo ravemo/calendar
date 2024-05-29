@@ -1,6 +1,8 @@
 const std = @import("std");
-const calendar = @import("event.zig");
-const Event = calendar.Event;
+const event_lib = @import("event.zig");
+const Event = event_lib.Event;
+const calendar = @import("datetime.zig");
+const Date = calendar.Date;
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
     @cInclude("SDL2/SDL_ttf.h");
@@ -71,5 +73,21 @@ pub const Surface = struct {
 
     pub fn draw(self: Self) void {
         _ = c.SDL_RenderCopy(self.renderer, self.tex, null, &self.getRect());
+    }
+
+    pub fn xFromDate(self: Self, date: Date) ?f32 {
+        return self.w * @as(f32, @floatFromInt(date.getWeekday())) / 7 + self.sx;
+    }
+    pub fn xFromWeekday(self: Self, wd: i32) f32 {
+        return @as(f32, @floatFromInt(wd)) * self.w / 7 + self.sx;
+    }
+    pub fn weekdayFromX(self: Self, x: f32) i32 {
+        return @intFromFloat(@floor(7 * (x - self.sx) / self.w));
+    }
+    pub fn yFromHour(self: Self, hour: f32) f32 {
+        return self.h * hour / (24 * self.getScale()) + self.sy;
+    }
+    pub fn hourFromY(self: Self, y: f32) f32 {
+        return (24 * self.getScale()) * (y - self.sy) / self.h;
     }
 };

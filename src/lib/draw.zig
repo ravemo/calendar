@@ -28,27 +28,12 @@ const event_color = arc.colorFromHex(0x1f842188);
 const task_color = arc.colorFromHex(0x22accc88);
 
 pub fn drawGrid(sf: Surface) void {
-    const z = 1 / sf.getScale();
     const renderer = sf.renderer;
-    const grid_count_h: usize = @intFromFloat(@ceil(sf.h / 12));
     arc.setColor(renderer, grid_color);
-    for (0..grid_count_h) |i| {
-        const y: f32 = z * @as(f32, @floatFromInt(i)) * sf.h / 48 + sf.sy;
+    for (0..48) |i| {
+        const y: f32 = sf.yFromHour(@as(f32, @floatFromInt(i)) / 2);
         _ = c.SDL_RenderDrawLineF(renderer, 0, y, sf.w, y);
     }
-}
-
-pub fn xFromWeekday(wday: i32, w: f32) f32 {
-    return w * @as(f32, @floatFromInt(wday)) / 7;
-}
-pub fn yFromHour(hour: f32, h: f32) f32 {
-    return h * hour / 24;
-}
-pub fn weekdayFromX(x: f32, w: f32) i32 {
-    return @intFromFloat(@floor(7 * x / w));
-}
-pub fn hourFromY(y: f32, h: f32) f32 {
-    return 24 * y / h;
 }
 
 pub fn drawSingleEvent(wv: *WeekView, event: Event) !void {
@@ -85,8 +70,8 @@ pub fn drawSingleEvent(wv: *WeekView, event: Event) !void {
     const z = 1 / wv.sf.getScale();
     const h = z * draw_event.duration.getHoursF();
 
-    const x = xFromWeekday(draw_event.start.getWeekday(), wv.sf.w) + 3;
-    const y = z * yFromHour(draw_event.start.getHourF(), wv.sf.h) + wv.sf.sy;
+    const x = wv.sf.xFromDate(draw_event.start).? + 3;
+    const y = wv.sf.yFromHour(draw_event.start.getHourF());
     arc.setColor(renderer, event_color);
     const rect = c.SDL_FRect{
         .x = x,
@@ -158,8 +143,8 @@ pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
     const z = 1 / wv.sf.getScale();
     const h = z * draw_task.time.getHoursF();
 
-    const x = xFromWeekday(draw_start.getWeekday(), wv.sf.w) + 3;
-    const y = z * yFromHour(draw_start.getHourF(), wv.sf.h) + wv.sf.sy;
+    const x = wv.sf.xFromWeekday(draw_start.getWeekday()) + 3;
+    const y = wv.sf.yFromHour(draw_start.getHourF());
     arc.setColor(renderer, task_color);
     const rect = c.SDL_FRect{
         .x = x,
@@ -183,7 +168,7 @@ pub fn drawTask(wv: *WeekView, task: Task, now: Date) !void {
     try drawSingleTask(wv, task);
 }
 
-pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Date) !void {
+pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Date, cursor: Date) !void {
     const renderer = wv.sf.renderer;
     _ = c.SDL_SetRenderTarget(renderer, wv.sf.tex);
     arc.setColor(renderer, background_color);
@@ -194,18 +179,22 @@ pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Da
 
     arc.setColor(renderer, divider_color);
     for (0..7) |i| {
-        const x = xFromWeekday(@intCast(i), wv.sf.w);
+        const x = wv.sf.xFromWeekday(@intCast(i));
         _ = c.SDL_RenderDrawLineF(renderer, x, 0, x, wv.sf.h);
     }
 
     const view_end = wv.start.after(.{ .weeks = 1 });
-    while (events_it.next(view_end)) |e| {
+    while (events_it.next(view_end)) |e|
         try drawEvent(wv, e, now);
+
+    for (tasks) |t|
+        try drawTask(wv, t, now);
+
+    if (wv.sf.xFromDate(cursor)) |x| {
+        const y = wv.sf.yFromHour(cursor.getHourF());
+        _ = c.SDL_RenderDrawLineF(renderer, x, y, x + wv.sf.w / 7, y);
     }
 
-    for (tasks) |t| {
-        try drawTask(wv, t, now);
-    }
     _ = c.SDL_SetRenderTarget(renderer, null);
 }
 

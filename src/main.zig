@@ -33,8 +33,7 @@ fn resetZoom(sf: *Surface) void {
     sf.zoom = 0;
     sf.zoomIn(60);
     sf.sy = 0;
-    const z = 1 / sf.getScale();
-    const sy = z * draw.yFromHour(Date.now().getHourF(), sf.h) - sf.h / 2;
+    const sy = sf.yFromHour(Date.now().getHourF()) - sf.h / 2;
     sf.scroll(-sy);
 }
 pub fn main() !void {
@@ -74,7 +73,7 @@ pub fn main() !void {
     // TODO: Use proper user_data_dir-like function when releasing to the public
     const tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
     defer tasks_db.deinit();
-    const events = try event_lib.loadEvents(allocator, events_db);
+    var events = try event_lib.loadEvents(allocator, events_db);
     var base_tasks = try TaskList.init(allocator, tasks_db);
     defer base_tasks.deinit();
     try base_tasks.sanitize();
@@ -96,10 +95,11 @@ pub fn main() !void {
     var dragging_event: ?*Event = null;
     var is_dragging_end = false; // Whether you are dragging the start of the event or the end
     var original_dragging_event: ?Event = null;
-    var dragging_start_x: i32 = undefined;
-    var dragging_start_y: i32 = undefined;
+    var dragging_start_x: f32 = undefined;
+    var dragging_start_y: f32 = undefined;
 
     var holding_shift = false;
+    var holding_ctrl = false;
 
     {
         var wake_event = std.mem.zeroes(c.SDL_Event);
@@ -108,6 +108,8 @@ pub fn main() !void {
     }
 
     var update = false;
+
+    var cursor = Date.now();
     mainLoop: while (true) {
         // Control
         var ev: c.SDL_Event = undefined;
@@ -127,6 +129,7 @@ pub fn main() !void {
                         }
                     },
                     c.SDL_SCANCODE_LSHIFT => holding_shift = true,
+                    c.SDL_SCANCODE_LCTRL => holding_ctrl = true,
                     c.SDL_SCANCODE_F5 => update = true,
                     else => {
                         std.debug.print("Unhandled key: {}\n", .{ev.key.keysym.scancode});
@@ -137,11 +140,13 @@ pub fn main() !void {
                     else => {},
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
-                    if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
+                    if (holding_ctrl) {
+                        cursor.setHourF(weekview.sf.hourFromY(@as(f32, @floatFromInt(ev.button.y)) - weekview.sf.y));
+                    } else if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
                         for (events.items) |*e| {
                             if (e.id != er.id) continue;
-                            dragging_start_x = ev.button.x;
-                            dragging_start_y = ev.button.y;
+                            dragging_start_x = @floatFromInt(ev.button.x);
+                            dragging_start_y = @floatFromInt(ev.button.y);
                             dragging_event = e;
                             original_dragging_event = e.*;
                             break;
@@ -156,17 +161,18 @@ pub fn main() !void {
                 },
                 c.SDL_MOUSEMOTION => {
                     if (dragging_event) |ev_ptr| {
-                        const x0 = weekview.sf.x;
-                        const y0 = weekview.sf.y;
-                        const scale = weekview.sf.getScale();
+                        const sf = weekview.sf;
+                        const x0 = sf.x;
+                        const y0 = sf.y;
+                        const scale = sf.getScale();
                         const mx: f32 = @floatFromInt(ev.motion.x);
                         const my: f32 = @floatFromInt(ev.motion.y);
                         const oev = original_dragging_event.?;
-                        const new_day = draw.weekdayFromX(mx - x0, weekview.sf.w);
-                        const new_hr = scale * draw.hourFromY(my - y0, weekview.sf.h);
+                        const new_day = sf.weekdayFromX(mx) - sf.weekdayFromX(x0);
+                        const new_hr = sf.hourFromY(my) - sf.hourFromY(y0);
 
-                        const old_day = draw.weekdayFromX(@as(f32, @floatFromInt(dragging_start_x)) - x0, weekview.sf.w);
-                        const old_hr = scale * draw.hourFromY(@as(f32, @floatFromInt(dragging_start_y)) - y0, weekview.sf.h);
+                        const old_day = sf.weekdayFromX(dragging_start_x) - sf.weekdayFromX(x0);
+                        const old_hr = scale * sf.hourFromY(dragging_start_y) - sf.hourFromY(y0);
 
                         const d_day: i32 = new_day - old_day;
                         var d_hr: f32 = new_hr - old_hr;
@@ -224,6 +230,8 @@ pub fn main() !void {
 
         if (update) {
             c.SDL_SetCursor(wait_cursor);
+            events.deinit();
+            events = try event_lib.loadEvents(allocator, events_db);
             base_tasks.deinit();
             base_tasks = try TaskList.init(allocator, tasks_db);
             try base_tasks.sanitize();
@@ -238,7 +246,7 @@ pub fn main() !void {
         // Drawing
 
         var events_it = try EventIterator.init(allocator, events.items, weekview.start);
-        try draw.drawWeek(&weekview, &events_it, tasks.tasks.items, Date.now());
+        try draw.drawWeek(&weekview, &events_it, tasks.tasks.items, Date.now(), cursor);
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);
 
