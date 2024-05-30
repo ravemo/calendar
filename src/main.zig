@@ -162,20 +162,12 @@ pub fn main() !void {
                 c.SDL_MOUSEMOTION => {
                     if (dragging_event) |ev_ptr| {
                         const sf = weekview.sf;
-                        const x0 = sf.x;
-                        const y0 = sf.y;
-                        const scale = sf.getScale();
                         const mx: f32 = @floatFromInt(ev.motion.x);
                         const my: f32 = @floatFromInt(ev.motion.y);
                         const oev = original_dragging_event.?;
-                        const new_day = sf.weekdayFromX(mx) - sf.weekdayFromX(x0);
-                        const new_hr = sf.hourFromY(my) - sf.hourFromY(y0);
 
-                        const old_day = sf.weekdayFromX(dragging_start_x) - sf.weekdayFromX(x0);
-                        const old_hr = scale * sf.hourFromY(dragging_start_y) - sf.hourFromY(y0);
-
-                        const d_day: i32 = new_day - old_day;
-                        var d_hr: f32 = new_hr - old_hr;
+                        const d_day: i32 = sf.weekdayFromX(mx) - sf.weekdayFromX(dragging_start_x);
+                        var d_hr: f32 = sf.hourFromY(my) - sf.hourFromY(dragging_start_y);
                         d_hr = @round(d_hr * 2) / 2; // Move in steps of 30 minutes
 
                         if (is_dragging_end) {

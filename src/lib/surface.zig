@@ -82,7 +82,7 @@ pub const Surface = struct {
         return @as(f32, @floatFromInt(wd)) * self.w / 7 + self.sx;
     }
     pub fn weekdayFromX(self: Self, x: f32) i32 {
-        return @intFromFloat(@floor(7 * (x - self.sx) / self.w));
+        return @intFromFloat(@round(7 * (x - self.sx) / self.w));
     }
     pub fn yFromHour(self: Self, hour: f32) f32 {
         return self.h * hour / (24 * self.getScale()) + self.sy;
