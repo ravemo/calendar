@@ -34,7 +34,7 @@ const Interval = struct {
             false;
     }
 
-    pub fn subtract(self: *Self, other: Self) ?Self {
+    pub fn subtract(self: *Self, other: Self) struct { changed: bool, extra: ?Self } {
         // Not defined if self is inside other
         std.debug.assert(!self.isInside(other));
         // We don't need to implement this yet
@@ -44,18 +44,26 @@ const Interval = struct {
             // --- | Interval | -----------
             // ----------| Event | --------
             self.end = other.start;
+            return .{ .changed = true, .extra = null };
         } else if (self.start.isBefore(other.end.?) and other.start.isBeforeEq(self.start)) {
             // --------- | Interval | ----
             // ------| Event | -----------
             self.start = other.end.?;
+            return .{ .changed = true, .extra = null };
         } else if (other.isInside(self.*)) {
             // ----- |   Interval   | -----
             // ---------| Event | ---------
             const old_end = self.end;
             self.end = other.start;
-            return .{ .start = other.end.?, .end = old_end };
+            return .{ .changed = true, .extra = .{ .start = other.end.?, .end = old_end } };
         } // else: Doesn't intersect, do nothing
-        return null;
+        return .{ .changed = false, .extra = null };
+    }
+
+    pub fn endsEarlierThan(self: Self, other: Self) bool {
+        if (self.end) |se| {
+            return if (other.end) |oe| se.isBeforeEq(oe) else true;
+        } else return false;
     }
 };
 
@@ -90,7 +98,6 @@ const IntervalIterator = struct {
 
         // Remove event intervals from interval list
         var i: usize = 0;
-        // TODO: It doesn't seem like this really needs to be an optional
         var e_opt = events.next(limit);
         while (i < intervals.items.len) {
             if (e_opt) |e| {
@@ -109,22 +116,20 @@ const IntervalIterator = struct {
                 if (interval.isInside(e_int)) {
                     _ = intervals.orderedRemove(i);
                 } else {
-                    const old_interval: Interval = interval.*;
-                    const extra_opt = interval.subtract(e_int);
-                    if (extra_opt) |extra| {
+                    const subtract_info = interval.subtract(e_int);
+                    if (subtract_info.extra) |extra| {
                         i += 1;
                         try intervals.insert(i, extra);
                         e_opt = events.next(limit);
                         continue;
                     }
 
-                    const changed_end = if (old_interval.end) |old_end|
-                        interval.end != null and interval.end.?.isBefore(old_end)
-                    else
-                        interval.end != null;
-
-                    if (old_interval.start.isBeforeEq(interval.start) and !changed_end) {
-                        e_opt = events.next(limit);
+                    if (!subtract_info.changed) {
+                        if (e_int.endsEarlierThan(interval.*)) {
+                            e_opt = events.next(limit);
+                        } else {
+                            i += 1;
+                        }
                     }
                 }
             } else break;
@@ -239,7 +244,6 @@ pub const Scheduler = struct {
             }
             try scheduled.tasks.append(best.*);
             if (!unscheduled.remove(best)) unreachable;
-            (Interval{ .start = interval.start, .end = interval.start.after(step) }).print();
             interval = self.intervals.next(step) orelse return scheduled;
         }
 

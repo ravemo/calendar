@@ -209,6 +209,8 @@ pub fn main() !void {
                             hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
                             days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
                             weekview = WeekView.init(allocator, renderer, scrn_w, scrn_h);
+                            resetZoom(&hours_surface);
+                            resetZoom(&weekview.sf);
                         },
                         else => {},
                     }
