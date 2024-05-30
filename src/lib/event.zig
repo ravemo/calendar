@@ -51,7 +51,6 @@ pub fn cmpByStartDate(_: void, a: Event, b: Event) bool {
 pub fn appendSorted(events: *std.ArrayList(Event), to_add: Event) !void {
     for (events.items, 0..) |e, i| {
         if (cmpByStartDate({}, to_add, e)) {
-            std.debug.print("Inserting at {}\n", .{i});
             try events.insert(i, to_add);
             return;
         }

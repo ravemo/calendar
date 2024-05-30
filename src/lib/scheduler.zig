@@ -12,97 +12,122 @@ const TaskList = task_lib.TaskList;
 const print = std.debug.print;
 
 const Interval = struct {
+    // A Interval is a semi-open interval from [start, end)
+    const Self = @This();
     start: Date,
     end: ?Date,
 
-    pub fn print(self: Interval) void {
+    pub fn print(self: Self) void {
         self.start.print();
         std.debug.print(" ~ ", .{});
         if (self.end) |e| e.print() else std.debug.print("infinity", .{});
+        std.debug.print("\n", .{});
+    }
+
+    pub fn isInside(self: Self, other: Self) bool {
+        const starts_after = other.start.isBeforeEq(self.start);
+        if (other.end == null) return starts_after;
+
+        return if (self.end) |self_end|
+            starts_after and self_end.isBeforeEq(other.end.?)
+        else
+            false;
+    }
+
+    pub fn subtract(self: *Self, other: Self) ?Self {
+        // Not defined if self is inside other
+        std.debug.assert(!self.isInside(other));
+        // We don't need to implement this yet
+        std.debug.assert(other.end != null);
+
+        if (self.end != null and self.end.?.isBeforeEq(other.end.?) and other.start.isBefore(self.end.?)) {
+            // --- | Interval | -----------
+            // ----------| Event | --------
+            self.end = other.start;
+        } else if (self.start.isBefore(other.end.?) and other.start.isBeforeEq(self.start)) {
+            // --------- | Interval | ----
+            // ------| Event | -----------
+            self.start = other.end.?;
+        } else if (other.isInside(self.*)) {
+            // ----- |   Interval   | -----
+            // ---------| Event | ---------
+            const old_end = self.end;
+            self.end = other.start;
+            return .{ .start = other.end.?, .end = old_end };
+        } // else: Doesn't intersect, do nothing
+        return null;
     }
 };
+
+fn getInterval(e: Event) Interval {
+    return .{ .start = e.start, .end = e.getEnd() };
+}
 
 const IntervalIterator = struct {
     const Self = @This();
     intervals: std.ArrayList(Interval),
 
     fn init(allocator: std.mem.Allocator, event_list: []Event, tasks: TaskList) !Self {
-        _ = tasks; // TODO: Break intervals at start dates
         var events = try EventIterator.init(allocator, event_list, Date.now());
         defer events.deinit();
         var intervals = std.ArrayList(Interval).init(allocator);
         try intervals.append(.{ .start = Date.now(), .end = null });
+        const limit = Date.now().after(.{ .weeks = 1 }).getWeekStart();
+
+        // Split intervals at tasks starts
+        const sorted_tasks = try tasks.tasks.clone();
+        defer sorted_tasks.deinit();
+        std.mem.sort(Task, sorted_tasks.items, {}, cmpByStartDate);
+        for (sorted_tasks.items) |t| {
+            if (t.start) |s| {
+                const i = &intervals.items[intervals.items.len - 1];
+                if (s.isBeforeEq(i.start)) continue;
+                i.end = s;
+                std.debug.assert(i.start.isBefore(s));
+                try intervals.append(.{ .start = s, .end = null });
+            } else break; // since the list is sorted, there isn't any more starts
+        }
+
+        // Remove event intervals from interval list
         var i: usize = 0;
-        const limit = Date.now().after(.{ .weeks = 1 });
+        // TODO: It doesn't seem like this really needs to be an optional
         var e_opt = events.next(limit);
         while (i < intervals.items.len) {
-            if (e_opt == null) break;
-            const interval = &intervals.items[i];
-            var start = interval.start;
-            if (limit.isBefore(start)) break;
+            if (e_opt) |e| {
+                const interval = &intervals.items[i];
+                if (limit.isBefore(interval.start)) break;
 
-            if (interval.end) |end| {
-                while (e_opt) |e| {
-                    if (limit.isBefore(e.start)) break;
-                    if (end.isBefore(e.start)) break; // Nothing to do
-                    const e_end = e.getEnd();
+                if (interval.end != null and interval.end.?.isBefore(e_opt.?.start)) {
+                    i += 1;
+                    continue;
+                }
 
-                    if (e.start.isBeforeEq(start) and end.isBeforeEq(e_end)) {
-                        // --------- | Interval | -----------
-                        // ------ |     Event      | --------
-                        _ = intervals.orderedRemove(i);
-                    } else if (end.isBeforeEq(e_end) and e.start.isBeforeEq(end)) {
-                        // --- | Interval | -----------
-                        // ----------| Event | --------
-                        interval.end = e.start;
+                if (limit.isBefore(e.start)) continue;
+
+                const e_int = getInterval(e);
+
+                if (interval.isInside(e_int)) {
+                    _ = intervals.orderedRemove(i);
+                } else {
+                    const old_interval: Interval = interval.*;
+                    const extra_opt = interval.subtract(e_int);
+                    if (extra_opt) |extra| {
                         i += 1;
-                    } else if (start.isBeforeEq(e_end) and e.start.isBeforeEq(start)) {
-                        // --------- | Interval | ----
-                        // ------| Event | -----------
-                        interval.start = e_end;
-                        i += 1;
-                    } else if (start.isBeforeEq(e.start) and e_end.isBeforeEq(end)) {
-                        // ----- |   Interval   | -----
-                        // ---------| Event | ---------
-                        var copy = interval.*;
-                        interval.end = e.start;
-                        copy.start = e_end;
-                        try intervals.insert(i + 1, copy);
-                        i += 1;
-                        break;
-                    } else {
-                        // Interval is after event; iterate over events to catch up
+                        try intervals.insert(i, extra);
                         e_opt = events.next(limit);
-                        if (e_opt == null) break;
+                        continue;
+                    }
+
+                    const changed_end = if (old_interval.end) |old_end|
+                        interval.end != null and interval.end.?.isBefore(old_end)
+                    else
+                        interval.end != null;
+
+                    if (old_interval.start.isBeforeEq(interval.start) and !changed_end) {
+                        e_opt = events.next(limit);
                     }
                 }
-            } else {
-                while (e_opt) |e| {
-                    std.debug.assert(i == intervals.items.len - 1);
-                    if (limit.isBefore(e.start)) break;
-                    const e_end = e.getEnd();
-
-                    if (start.isBeforeEq(e.start)) {
-                        // --- | Interval                   -->
-                        // ----------| Event | --------
-                        var copy = interval.*;
-                        interval.end = e.start;
-                        copy.start = e_end;
-                        try intervals.append(copy);
-                        i += 1;
-                        break;
-                    } else if (e.start.isBeforeEq(start) and start.isBefore(e_end)) {
-                        // --------- | Interval                  -->
-                        // ------ |     Event      | --------
-                        interval.start = e_end;
-                        start = interval.start;
-                    } else {
-                        // Interval is after event; iterate over events to catch up
-                        e_opt = events.next(limit);
-                        if (e_opt == null) break;
-                    }
-                }
-            }
+            } else break;
         }
 
         return .{
@@ -144,11 +169,17 @@ const IntervalIterator = struct {
     }
 };
 
-pub fn cmpByDueDate(context: void, a: Task, b: Task) bool {
-    _ = context;
+pub fn cmpByDueDate(_: void, a: Task, b: Task) bool {
     if (b.due) |bd| {
         return if (a.due) |ad| return ad.isBefore(bd) else false;
     } else if (a.due) |_| {
+        return true;
+    } else return a.id < b.id;
+}
+pub fn cmpByStartDate(_: void, a: Task, b: Task) bool {
+    if (b.start) |bs| {
+        return if (a.start) |as| return as.isBefore(bs) else false;
+    } else if (a.start) |_| {
         return true;
     } else return a.id < b.id;
 }
