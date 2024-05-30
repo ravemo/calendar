@@ -196,7 +196,7 @@ pub const TaskList = struct {
         for (task.deps) |d| {
             if (d == null) continue;
             if (self.getById(d.?)) |t| {
-                if (t.start != null and at_time.isBefore(t.start.?)) return null;
+                if (t.start != null and at_time.isBeforeEq(t.start.?)) return null;
                 return self.getFirstTask(t, at_time);
             }
         }
@@ -204,7 +204,7 @@ pub const TaskList = struct {
         var has_pending_children = false;
         for (self.tasks.items) |*t| {
             if (t.parent == task.id) {
-                if (t.start != null and at_time.isBefore(t.start.?)) {
+                if (t.start != null and at_time.isBeforeEq(t.start.?)) {
                     has_pending_children = true;
                     continue;
                 }

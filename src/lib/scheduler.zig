@@ -141,31 +141,28 @@ const IntervalIterator = struct {
 
     fn next(self: *Self, step: Time) ?Interval {
         var cur = &self.intervals.items[0];
+        var sub_time = step;
         while (true) {
+            cur = &self.intervals.items[0];
+            const next_start = cur.start.after(sub_time);
             if (cur.end) |e| {
-                if (e.isBeforeEq(cur.start)) {
+                if (e.isBeforeEq(next_start)) {
+                    sub_time = sub_time.sub(e.timeSince(cur.start));
                     _ = self.intervals.orderedRemove(0);
                     if (self.intervals.items.len == 0) return null;
-                } else {
-                    break;
+                    continue;
                 }
-            } else break;
+            }
+            cur.start = next_start;
+            break;
         }
 
-        // Generate interval to return
-        var ret = cur.*;
-        ret.end = ret.start.after(step);
-        if (cur.end != null and cur.end.?.isBefore(ret.end.?))
-            ret.end = cur.end;
-
         // Split at day transition
-        const day_end = ret.start.after(.{ .days = 1 }).getDayStart();
-        if (day_end.isBefore(ret.end.?))
-            ret.end = day_end;
+        const day_end = cur.start.after(.{ .days = 1 }).getDayStart();
+        if (day_end.isBefore(cur.end.?))
+            cur.end = day_end;
 
-        cur.start = ret.end.?;
-
-        return ret;
+        return cur.*;
     }
 };
 
@@ -185,14 +182,13 @@ pub fn cmpByStartDate(_: void, a: Task, b: Task) bool {
 }
 
 fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
-    if (Date.now().after(.{ .weeks = 1 }).isBefore(interval.start)) {
+    if (Date.now().after(.{ .weeks = 1 }).getWeekStart().isBefore(interval.start)) {
         std.debug.print("TODO REMOVE ME: Quitting early\n", .{});
         return null;
     }
     for (tasks.tasks.items) |*t| {
         if (t.start != null and interval.start.isBefore(t.start.?)) continue;
-        if (tasks.getFirstTask(t, interval.start)) |ret|
-            return ret;
+        if (tasks.getFirstTask(t, interval.start)) |ret| return ret;
     }
 
     return null;
@@ -223,33 +219,43 @@ pub const Scheduler = struct {
         var scheduled = TaskList{ .tasks = std.ArrayList(Task).init(self.allocator), .allocator = self.allocator };
         var unscheduled = TaskList{ .tasks = try tl.tasks.clone(), .allocator = tl.allocator };
 
-        // TODO Split intervals based on start dates of tasks
         var interval = self.intervals.intervals.items[0];
 
         while (unscheduled.tasks.items.len > 0) {
             std.mem.sort(Task, unscheduled.tasks.items, {}, cmpByDueDate);
-            const best = getBestTask(interval, &unscheduled) orelse break;
-            interval = self.intervals.next(best.time) orelse return scheduled;
+            const best: *Task = getBestTask(interval, &unscheduled) orelse break;
             best.scheduled_start = interval.start;
+            var step = best.time;
+            // NOTE: The appends from now on will invalidate `best`
             if (interval.end) |e| {
                 if (e.isBefore(best.getEnd().?)) {
                     var copy = best.*;
-                    copy.time = e.timeSince(interval.start);
-                    best.time = best.time.sub(copy.time);
+                    best.time = e.timeSince(interval.start);
+                    step = best.time;
+                    copy.time = copy.time.sub(best.time);
 
-                    try scheduled.tasks.append(copy);
-                } else {
-                    try scheduled.tasks.append(best.*);
-                    if (!unscheduled.remove(best)) unreachable;
+                    try unscheduled.tasks.append(copy);
                 }
-            } else {
-                try scheduled.tasks.append(best.*);
-                if (!unscheduled.remove(best)) unreachable;
             }
+            try scheduled.tasks.append(best.*);
+            if (!unscheduled.remove(best)) unreachable;
+            (Interval{ .start = interval.start, .end = interval.start.after(step) }).print();
+            interval = self.intervals.next(step) orelse return scheduled;
         }
 
-        // TODO Merge tasks that start right after another (artifact of spliting
-        // intervals at start dates)
+        var i: usize = 0;
+        while (i < scheduled.tasks.items.len - 1) { // Yes, we ignore the last element
+            const cur = &scheduled.tasks.items[i];
+            const next = scheduled.tasks.items[i + 1];
+            i += 1;
+            if (cur.id != next.id) continue;
+
+            if (next.scheduled_start.?.isBeforeEq(cur.getEnd().?)) {
+                cur.time = cur.time.add(next.time);
+                _ = scheduled.tasks.orderedRemove(i);
+                i -= 1;
+            }
+        }
 
         return scheduled;
     }

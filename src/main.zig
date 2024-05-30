@@ -131,9 +131,7 @@ pub fn main() !void {
                     c.SDL_SCANCODE_LSHIFT => holding_shift = true,
                     c.SDL_SCANCODE_LCTRL => holding_ctrl = true,
                     c.SDL_SCANCODE_F5 => update = true,
-                    else => {
-                        std.debug.print("Unhandled key: {}\n", .{ev.key.keysym.scancode});
-                    },
+                    else => {},
                 },
                 c.SDL_KEYUP => switch (ev.key.keysym.scancode) {
                     c.SDL_SCANCODE_LSHIFT => holding_shift = false,
