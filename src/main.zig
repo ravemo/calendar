@@ -30,11 +30,12 @@ var scrn_h: f32 = 600;
 
 var wakeEvent: u32 = undefined;
 fn resetZoom(sf: *Surface) void {
+    const last_hour_center = sf.hourFromY(sf.h / 2);
     sf.zoom = 0;
     sf.zoomIn(60);
     sf.sy = 0;
-    const sy = sf.yFromHour(Date.now().getHourF()) - sf.h / 2;
-    sf.scroll(-sy);
+    const sy = sf.h / 2 - sf.yFromHour(last_hour_center);
+    sf.scroll(sy);
 }
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
