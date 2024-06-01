@@ -80,7 +80,7 @@ const IntervalIterator = struct {
         defer events.deinit();
         var intervals = std.ArrayList(Interval).init(allocator);
         try intervals.append(.{ .start = Date.now(), .end = null });
-        const limit = Date.now().after(.{ .weeks = 1 }).getWeekStart();
+        const limit = Date.now().after(.{ .weeks = 1 });
 
         // Split intervals at tasks starts
         const sorted_tasks = try tasks.tasks.clone();
@@ -187,7 +187,7 @@ pub fn cmpByStartDate(_: void, a: Task, b: Task) bool {
 }
 
 fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
-    if (Date.now().after(.{ .weeks = 1 }).getWeekStart().isBefore(interval.start)) {
+    if (Date.now().after(.{ .weeks = 1 }).isBefore(interval.start)) {
         std.debug.print("TODO REMOVE ME: Quitting early\n", .{});
         return null;
     }

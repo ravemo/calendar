@@ -382,7 +382,9 @@ pub const Date = struct {
         self.tm.tm_mday = mday;
     }
     pub fn setWeekday(self: *Self, wday: Weekday) void {
-        self.tm.tm_wday = @intFromEnum(wday);
+        self.update();
+        self.tm.tm_mday += @as(i32, @intFromEnum(wday)) - self.tm.tm_wday;
+        self.update();
     }
     pub fn setHours(self: *Self, hour: i32) void {
         self.tm.tm_hour = hour;

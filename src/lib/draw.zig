@@ -92,16 +92,16 @@ pub fn drawEvent(wv: *WeekView, event: Event, now: Date) !void {
     const view_end = wv.start.after(.{ .weeks = 1 });
 
     if (event.repeat) |repeat| {
-        const repeat_end = repeat.end orelse view_end;
         switch (repeat.period) {
-            .time => |t| {
-                var iterator = DateIter.init(view_start, repeat_end);
-                while (iterator.next(t)) |i| {
-                    const e = event.atDay(i);
-                    if (e.getEnd().isBefore(view_start)) continue;
-                    if (view_end.isBefore(e.start)) continue;
-                    try drawSingleEvent(wv, e);
-                }
+            // TODO: Refactor DateIter so we can support more than weekly repeats
+            // Yes. DateIter is not working. You probably have to do the
+            // 'repeating task' vs 'normal task' thing.
+            // It will be two birds with one stone.
+            .time => |_| blk: {
+                const e = event.atDay(view_start).atWeekday(@enumFromInt(event.start.getWeekday()));
+                if (e.getEnd().isBefore(view_start)) break :blk;
+                if (view_end.isBefore(e.start)) break :blk;
+                try drawSingleEvent(wv, e);
             },
             .pattern => |p| {
                 // TODO use arrays?
