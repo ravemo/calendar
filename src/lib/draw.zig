@@ -26,6 +26,7 @@ const grid_color = arc.colorFromHex(0xeeeeeeff);
 const divider_color = arc.colorFromHex(0xaaaaaaff);
 const event_color = arc.colorFromHex(0x1f842188);
 const task_color = arc.colorFromHex(0x22accc88);
+const tooltip_bg_color = arc.colorFromHex(0xd8d888aa);
 
 pub fn drawGrid(sf: Surface) void {
     const renderer = sf.renderer;
@@ -251,3 +252,36 @@ pub fn drawDays(sf: Surface, now: Date) void {
 
     _ = c.SDL_SetRenderTarget(renderer, null);
 }
+
+pub const Tooltip = struct {
+    const Self = @This();
+    id: i32,
+    text: []const u8,
+    x: i32,
+    y: i32,
+
+    pub fn draw(self: Self, allocator: std.mem.Allocator, renderer: Renderer) !void {
+        arc.setColor(renderer, tooltip_bg_color);
+        const rect = c.SDL_Rect{
+            .x = self.x,
+            .y = self.y - 100,
+            .w = 200,
+            .h = 100,
+        };
+        _ = c.SDL_RenderFillRect(renderer, &rect);
+
+        arc.setColor(renderer, text_color);
+        var tooltip_text = std.ArrayList(u8).init(allocator);
+        defer tooltip_text.deinit();
+        try tooltip_text.writer().print("{}: {s}\n", .{ self.id, self.text });
+        text.drawText(
+            renderer,
+            tooltip_text.items,
+            @as(f32, @floatFromInt(self.x)) + 5,
+            @as(f32, @floatFromInt(self.y)) - 100 + 5,
+            200,
+            .Left,
+            .Top,
+        );
+    }
+};

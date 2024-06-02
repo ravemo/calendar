@@ -15,6 +15,7 @@ const EventIterator = event_lib.EventIterator;
 
 const draw = @import("lib/draw.zig");
 const Renderer = draw.Renderer;
+const Tooltip = draw.Tooltip;
 const Surface = @import("lib/surface.zig").Surface;
 const WeekView = @import("lib/weekview.zig").WeekView;
 
@@ -111,6 +112,7 @@ pub fn main() !void {
     var update = false;
 
     var cursor = Date.now();
+    var tooltip: ?Tooltip = null;
     mainLoop: while (true) {
         // Control
         var ev: c.SDL_Event = undefined;
@@ -183,7 +185,15 @@ pub fn main() !void {
                         if (weekview.getEventRectBelow(ev.motion.x, ev.motion.y)) |er| {
                             is_dragging_end = weekview.isHoveringEnd(ev.motion.x, ev.motion.y, er);
                             c.SDL_SetCursor(if (is_dragging_end) sizens_cursor else hand_cursor);
+                        } else if (weekview.getTaskRectBelow(ev.motion.x, ev.motion.y)) |tr| {
+                            tooltip = .{
+                                .id = tr.id,
+                                .text = tasks.getById(tr.id).?.name,
+                                .x = ev.motion.x,
+                                .y = ev.motion.y,
+                            };
                         } else {
+                            tooltip = null;
                             c.SDL_SetCursor(normal_cursor);
                         }
                     }
@@ -230,8 +240,7 @@ pub fn main() !void {
             try base_tasks.sanitize();
             try scheduler.reset(events.items, base_tasks);
             tasks = try scheduler.scheduleTasks(base_tasks);
-            resetZoom(&hours_surface);
-            resetZoom(&weekview.sf);
+            cursor = Date.now();
             c.SDL_SetCursor(normal_cursor);
             update = false;
         }
@@ -248,6 +257,10 @@ pub fn main() !void {
         weekview.sf.draw();
         days_surface.draw();
         hours_surface.draw();
+
+        if (tooltip) |tt| {
+            try tt.draw(allocator, renderer);
+        }
 
         c.SDL_RenderPresent(renderer);
     }
