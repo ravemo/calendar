@@ -221,8 +221,9 @@ pub const Scheduler = struct {
     }
 
     pub fn scheduleTasks(self: *Self, tl: TaskList) !TaskList {
-        var scheduled = TaskList{ .tasks = std.ArrayList(Task).init(self.allocator), .allocator = self.allocator };
-        var unscheduled = TaskList{ .tasks = try tl.tasks.clone(), .allocator = tl.allocator };
+        var scheduled = TaskList.initEmpty(self.allocator);
+        var unscheduled = try tl.clone();
+        defer unscheduled.deinit();
 
         var interval = self.intervals.intervals.items[0];
 

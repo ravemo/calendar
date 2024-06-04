@@ -39,7 +39,11 @@ fn resetZoom(sf: *Surface) void {
     sf.scroll(sy);
 }
 pub fn main() !void {
-    const allocator = std.heap.page_allocator;
+    var gpa = std.heap.GeneralPurposeAllocator(.{
+        .enable_memory_limit = true,
+    }){ .requested_memory_limit = 1024 * 1024 * 10 };
+    const allocator = gpa.allocator();
+    defer _ = gpa.deinit();
 
     // SDL-related stuff
     if (c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_EVENTS) < 0)
@@ -76,6 +80,7 @@ pub fn main() !void {
     const tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
     defer tasks_db.deinit();
     var events = try event_lib.loadEvents(allocator, events_db);
+    defer events.deinit();
     var base_tasks = try TaskList.init(allocator, tasks_db);
     defer base_tasks.deinit();
     try base_tasks.sanitize();
@@ -83,6 +88,7 @@ pub fn main() !void {
     var scheduler = try Scheduler.init(allocator, events.items, base_tasks);
     defer scheduler.deinit();
     var tasks = try scheduler.scheduleTasks(base_tasks);
+    defer tasks.deinit();
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
     var days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
@@ -239,6 +245,7 @@ pub fn main() !void {
             base_tasks = try TaskList.init(allocator, tasks_db);
             try base_tasks.sanitize();
             try scheduler.reset(events.items, base_tasks);
+            tasks.deinit();
             tasks = try scheduler.scheduleTasks(base_tasks);
             cursor = Date.now();
             c.SDL_SetCursor(normal_cursor);
@@ -248,6 +255,7 @@ pub fn main() !void {
         // Drawing
 
         var events_it = try EventIterator.init(allocator, events.items, weekview.start);
+        defer events_it.deinit();
         try draw.drawWeek(&weekview, &events_it, tasks.tasks.items, Date.now(), cursor);
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);

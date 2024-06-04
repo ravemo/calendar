@@ -29,7 +29,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
     const allocator = tasks.allocator;
     var id: i32 = undefined;
     var parent: ?i32 = null;
-    var name: []const u8 = undefined;
+    var name_addr: []const u8 = undefined;
     var time: ?Time = null;
     var start: ?Date = null;
     var due: ?Date = null;
@@ -44,7 +44,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
             if (val) |v|
                 parent = std.fmt.parseInt(i32, v, 10) catch return -1;
         } else if (std.mem.eql(u8, col, "desc")) {
-            name = allocator.dupe(u8, val.?) catch return -1;
+            name_addr = val orelse return -1;
         } else if (std.mem.eql(u8, col, "start")) {
             if (val) |v|
                 start = Date.fromString(v) catch return -1;
@@ -84,7 +84,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
     tasks.append(.{
         .id = id,
         .parent = parent,
-        .name = name,
+        .name = allocator.dupe(u8, name_addr) catch unreachable,
         .time = time orelse .{ .seconds = 2 * 60 * 60 },
         .start = start,
         .due = due,
@@ -97,22 +97,54 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
 pub const TaskList = struct {
     const Self = @This();
     tasks: std.ArrayList(Task),
+    task_names: std.ArrayList([]const u8),
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, db: Database) !Self {
         var tasks = std.ArrayList(Task).init(allocator);
+        var task_names = std.ArrayList([]const u8).init(allocator);
         const query = try std.fmt.allocPrintZ(allocator,
             \\ SELECT * FROM tasks;
         , .{});
         defer allocator.free(query);
 
         try db.executeCB(query, load_task_cb, &tasks);
+        for (tasks.items) |*t| {
+            try task_names.append(t.name); // It is owned here now
+        }
         std.debug.print("Loaded {} tasks.\n", .{tasks.items.len});
-        return .{ .tasks = tasks, .allocator = allocator };
+        return .{
+            .tasks = tasks,
+            .task_names = task_names,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn initEmpty(allocator: std.mem.Allocator) Self {
+        return .{
+            .tasks = std.ArrayList(Task).init(allocator),
+            .task_names = std.ArrayList([]const u8).init(allocator),
+            .allocator = allocator,
+        };
     }
 
     pub fn deinit(self: Self) void {
+        for (self.task_names.items) |i|
+            self.allocator.free(i);
+        self.task_names.deinit();
         self.tasks.deinit();
+    }
+
+    pub fn clone(self: Self) !Self {
+        const new_tasks = try self.tasks.clone();
+        const new_names = try self.task_names.clone();
+        for (new_names.items) |*i|
+            i.* = try self.allocator.dupe(u8, i.*);
+        return .{
+            .tasks = new_tasks,
+            .task_names = new_names,
+            .allocator = self.allocator,
+        };
     }
 
     pub fn getById(self: Self, id: i32) ?*Task {
