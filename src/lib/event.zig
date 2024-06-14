@@ -44,6 +44,55 @@ pub const Event = struct {
     }
 };
 
+pub const EventList = struct {
+    const Self = @This();
+    events: std.ArrayList(Event),
+    event_names: std.ArrayList([]const u8),
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator, db: Database) !Self {
+        const events = try loadEvents(allocator, db);
+        var event_names = std.ArrayList([]const u8).init(allocator);
+
+        for (events.items) |*t| {
+            try event_names.append(t.name); // It is owned here now
+        }
+        std.debug.print("Loaded {} events.\n", .{events.items.len});
+        return .{
+            .events = events,
+            .event_names = event_names,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn initEmpty(allocator: std.mem.Allocator) Self {
+        return .{
+            .events = std.ArrayList(Event).init(allocator),
+            .event_names = std.ArrayList([]const u8).init(allocator),
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: Self) void {
+        for (self.event_names.items) |i|
+            self.allocator.free(i);
+        self.event_names.deinit();
+        self.events.deinit();
+    }
+
+    pub fn clone(self: Self) !Self {
+        const new_events = try self.events.clone();
+        const new_names = try self.event_names.clone();
+        for (new_names.items) |*i|
+            i.* = try self.allocator.dupe(u8, i.*);
+        return .{
+            .events = new_events,
+            .event_names = new_names,
+            .allocator = self.allocator,
+        };
+    }
+};
+
 pub fn cmpByStartDate(_: void, a: Event, b: Event) bool {
     return a.start.isBefore(b.start);
 }
@@ -133,7 +182,13 @@ fn load_event_cb(events_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [
         }
     }
 
-    if (has_repeat) std.debug.assert(repeat != null);
+    if (has_repeat) {
+        std.debug.assert(repeat != null);
+        if (repeat.?.period.time.getSeconds() < 60) {
+            std.debug.print("{}: {s}\n{any}\n", .{ id, name, repeat.? });
+            std.debug.assert(false);
+        }
+    }
     if (repeat) |*r| r.end = r_end;
 
     if (end.isBefore(start)) {

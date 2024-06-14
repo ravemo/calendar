@@ -29,6 +29,7 @@ pub fn main() !void {
     defer ln.deinit();
     while (try ln.linenoiseZ("> ")) |input| {
         defer allocator.free(input);
+        if (input.len == 0) continue;
 
         const cmd_general = try commands.initCmd(allocator, input);
         defer cmd_general.deinit();

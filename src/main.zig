@@ -11,6 +11,7 @@ const Date = datetime.Date;
 const Time = datetime.Time;
 const event_lib = @import("lib/event.zig");
 const Event = event_lib.Event;
+const EventList = event_lib.EventList;
 const EventIterator = event_lib.EventIterator;
 
 const draw = @import("lib/draw.zig");
@@ -79,13 +80,13 @@ pub fn main() !void {
     // TODO: Use proper user_data_dir-like function when releasing to the public
     const tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
     defer tasks_db.deinit();
-    var events = try event_lib.loadEvents(allocator, events_db);
+    var events = try EventList.init(allocator, events_db);
     defer events.deinit();
     var base_tasks = try TaskList.init(allocator, tasks_db);
     defer base_tasks.deinit();
     try base_tasks.sanitize();
 
-    var scheduler = try Scheduler.init(allocator, events.items, base_tasks);
+    var scheduler = try Scheduler.init(allocator, events.events.items, base_tasks);
     defer scheduler.deinit();
     var tasks = try scheduler.scheduleTasks(base_tasks);
     defer tasks.deinit();
@@ -147,10 +148,11 @@ pub fn main() !void {
                     else => {},
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
+                    tooltip = null;
                     if (holding_ctrl) {
                         cursor.setHourF(weekview.sf.hourFromY(@as(f32, @floatFromInt(ev.button.y)) - weekview.sf.y));
                     } else if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
-                        for (events.items) |*e| {
+                        for (events.events.items) |*e| {
                             if (e.id != er.id) continue;
                             dragging_start_x = @floatFromInt(ev.button.x);
                             dragging_start_y = @floatFromInt(ev.button.y);
@@ -189,6 +191,12 @@ pub fn main() !void {
                         }
                     } else {
                         if (weekview.getEventRectBelow(ev.motion.x, ev.motion.y)) |er| {
+                            tooltip = .{
+                                .id = er.id,
+                                .text = "",
+                                .x = ev.motion.x,
+                                .y = ev.motion.y,
+                            };
                             is_dragging_end = weekview.isHoveringEnd(ev.motion.x, ev.motion.y, er);
                             c.SDL_SetCursor(if (is_dragging_end) sizens_cursor else hand_cursor);
                         } else if (weekview.getTaskRectBelow(ev.motion.x, ev.motion.y)) |tr| {
@@ -240,11 +248,11 @@ pub fn main() !void {
         if (update) {
             c.SDL_SetCursor(wait_cursor);
             events.deinit();
-            events = try event_lib.loadEvents(allocator, events_db);
+            events = try EventList.init(allocator, events_db);
             base_tasks.deinit();
             base_tasks = try TaskList.init(allocator, tasks_db);
             try base_tasks.sanitize();
-            try scheduler.reset(events.items, base_tasks);
+            try scheduler.reset(events.events.items, base_tasks);
             tasks.deinit();
             tasks = try scheduler.scheduleTasks(base_tasks);
             cursor = Date.now();
@@ -254,7 +262,7 @@ pub fn main() !void {
 
         // Drawing
 
-        var events_it = try EventIterator.init(allocator, events.items, weekview.start);
+        var events_it = try EventIterator.init(allocator, events.events.items, weekview.start);
         defer events_it.deinit();
         try draw.drawWeek(&weekview, &events_it, tasks.tasks.items, Date.now(), cursor);
         draw.drawHours(hours_surface, Date.now());
