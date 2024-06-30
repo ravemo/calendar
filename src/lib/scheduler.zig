@@ -193,7 +193,10 @@ fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
     }
     for (tasks.tasks.items) |*t| {
         if (t.start != null and interval.start.isBefore(t.start.?)) continue;
-        if (tasks.getFirstTask(t, interval.start)) |ret| return ret;
+        if (tasks.getFirstTask(t, interval.start)) |ret| {
+            ret.is_due_dep = (t.due != null);
+            return ret;
+        }
     }
 
     return null;

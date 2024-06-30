@@ -26,6 +26,7 @@ const grid_color = arc.colorFromHex(0xeeeeeeff);
 const divider_color = arc.colorFromHex(0xaaaaaaff);
 const event_color = arc.colorFromHex(0x1f842188);
 const task_color = arc.colorFromHex(0x22accc88);
+const due_task_color = arc.colorFromHex(0x22acccff);
 const tooltip_bg_color = arc.colorFromHex(0xd8d888aa);
 
 pub fn drawGrid(sf: Surface) void {
@@ -146,7 +147,11 @@ pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
 
     const x = wv.sf.xFromWeekday(draw_start.getWeekday()) + 3;
     const y = wv.sf.yFromHour(draw_start.getHourF());
-    arc.setColor(renderer, task_color);
+    if (task.due != null or task.is_due_dep) {
+        arc.setColor(renderer, due_task_color);
+    } else {
+        arc.setColor(renderer, task_color);
+    }
     const rect = c.SDL_FRect{
         .x = x,
         .y = y + 1,
@@ -238,7 +243,7 @@ pub fn drawDays(sf: Surface, now: Date) void {
     for (0..7, weekdays) |i, weekday| {
         const cur_day = now.getWeekStart().after(.{ .days = @intCast(i) });
         const x: f32 = sf.w * @as(f32, @floatFromInt(i)) / 7;
-        var buf: [2:0]u8 = undefined;
+        var buf: [2:0]u8 = [_:0]u8{ 0, 0 };
         _ = std.fmt.formatIntBuf(&buf, cur_day.getDay(), 10, .lower, .{});
         text.drawText(renderer, weekday, x + sf.w / 14, sf.h / 3, -1, .Center, .Center);
         text.drawText(renderer, &buf, x + sf.w / 14, 2 * sf.h / 3, -1, .Center, .Center);

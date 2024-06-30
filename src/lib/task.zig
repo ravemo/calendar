@@ -18,6 +18,7 @@ pub const Task = struct {
     scheduled_start: ?Date,
     // TODO: Tasks should be able to be split, so we need scheduled_time
     deps: [32]?i32,
+    is_due_dep: bool = false,
 
     pub fn getEnd(self: Self) ?Date {
         return if (self.scheduled_start) |s| s.after(self.time) else self.due;
