@@ -122,8 +122,11 @@ pub fn drawEvent(wv: *WeekView, event: Event, now: Date) !void {
 }
 
 pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
+    std.debug.assert(task.scheduled_start != null);
+    if (!task.getEnd().?.eql(task.getEnd().?.getDayStart()))
+        std.debug.assert(task.scheduled_start.?.getDay() == task.getEnd().?.getDay());
+
     const renderer = wv.sf.renderer;
-    // TODO: Split if the event crosses the day boundary
 
     if (task.scheduled_start == null) return;
 

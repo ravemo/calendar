@@ -256,4 +256,15 @@ pub const TaskList = struct {
         }
         return false;
     }
+
+    pub fn checkOverlap(self: Self) !void {
+        var last_end = self.tasks.items[0].getEnd().?;
+        for (self.tasks.items[1..]) |task| {
+            const new_start = task.scheduled_start.?;
+            const new_end = task.getEnd().?;
+            std.debug.assert(last_end.isBeforeEq(new_start));
+            std.debug.assert(new_start.isBeforeEq(new_end));
+            last_end = new_end;
+        }
+    }
 };

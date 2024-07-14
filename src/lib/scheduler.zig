@@ -11,7 +11,7 @@ const TaskList = task_lib.TaskList;
 
 const print = std.debug.print;
 
-const Interval = struct {
+pub const Interval = struct {
     // A Interval is a semi-open interval from [start, end)
     const Self = @This();
     start: Date,
@@ -41,21 +41,22 @@ const Interval = struct {
         std.debug.assert(other.end != null);
 
         if (self.end != null and self.end.?.isBeforeEq(other.end.?) and other.start.isBefore(self.end.?)) {
-            // --- | Interval | -----------
-            // ----------| Event | --------
+            // --- | Self     | -----------
+            // ----------| Other | --------
             self.end = other.start;
             return .{ .changed = true, .extra = null };
         } else if (self.start.isBefore(other.end.?) and other.start.isBeforeEq(self.start)) {
-            // --------- | Interval | ----
-            // ------| Event | -----------
+            // --------- | Self     | ----
+            // ------| Other | -----------
             self.start = other.end.?;
             return .{ .changed = true, .extra = null };
         } else if (other.isInside(self.*)) {
-            // ----- |   Interval   | -----
-            // ---------| Event | ---------
+            // ----- |   Self       | -----
+            // ---------| Other | ---------
             const old_end = self.end;
             self.end = other.start;
-            return .{ .changed = true, .extra = .{ .start = other.end.?, .end = old_end } };
+            const extra = Self{ .start = other.end.?, .end = old_end };
+            return .{ .changed = true, .extra = extra };
         } // else: Doesn't intersect, do nothing
         return .{ .changed = false, .extra = null };
     }
@@ -78,8 +79,10 @@ const IntervalIterator = struct {
     fn init(allocator: std.mem.Allocator, event_list: []Event, tasks: TaskList) !Self {
         var events = try EventIterator.init(allocator, event_list, Date.now());
         defer events.deinit();
-        var intervals = std.ArrayList(Interval).init(allocator);
-        try intervals.append(.{ .start = Date.now(), .end = null });
+        var self = Self{
+            .intervals = std.ArrayList(Interval).init(allocator),
+        };
+        try self.intervals.append(.{ .start = Date.now(), .end = null });
         const limit = Date.now().after(.{ .weeks = 1 });
 
         // Split intervals at tasks starts
@@ -88,20 +91,20 @@ const IntervalIterator = struct {
         std.mem.sort(Task, sorted_tasks.items, {}, cmpByStartDate);
         for (sorted_tasks.items) |t| {
             if (t.start) |s| {
-                const i = &intervals.items[intervals.items.len - 1];
+                const i = &self.intervals.items[self.intervals.items.len - 1];
                 if (s.isBeforeEq(i.start)) continue;
                 i.end = s;
                 std.debug.assert(i.start.isBefore(s));
-                try intervals.append(.{ .start = s, .end = null });
+                try self.intervals.append(.{ .start = s, .end = null });
             } else break; // since the list is sorted, there isn't any more starts
         }
 
         // Remove event intervals from interval list
         var i: usize = 0;
         var e_opt = events.next(limit);
-        while (i < intervals.items.len) {
+        while (i < self.intervals.items.len) {
             if (e_opt) |e| {
-                const interval = &intervals.items[i];
+                const interval = &self.intervals.items[i];
                 if (limit.isBefore(interval.start)) break;
 
                 if (interval.end != null and interval.end.?.isBefore(e_opt.?.start)) {
@@ -114,12 +117,12 @@ const IntervalIterator = struct {
                 const e_int = getInterval(e);
 
                 if (interval.isInside(e_int)) {
-                    _ = intervals.orderedRemove(i);
+                    _ = self.intervals.orderedRemove(i);
                 } else {
                     const subtract_info = interval.subtract(e_int);
                     if (subtract_info.extra) |extra| {
                         i += 1;
-                        try intervals.insert(i, extra);
+                        try self.intervals.insert(i, extra);
                         e_opt = events.next(limit);
                         continue;
                     }
@@ -135,9 +138,7 @@ const IntervalIterator = struct {
             } else break;
         }
 
-        return .{
-            .intervals = intervals,
-        };
+        return self;
     }
 
     fn deinit(self: Self) void {
@@ -169,6 +170,18 @@ const IntervalIterator = struct {
 
         return cur.*;
     }
+
+    fn checkOverlaps(self: Self) !void {
+        var last_end = self.intervals.items[0].end;
+        for (self.intervals.items[1..], 1..) |int, i| {
+            std.debug.assert(last_end != null);
+            if (i < self.intervals.items.len - 1) std.debug.assert(int.end != null);
+            std.debug.assert(int.start.isBefore(int.end));
+            std.debug.assert(last_end.?.isBeforeEq(int.start));
+            last_end = int.end;
+        }
+        std.debug.assert(last_end == null);
+    }
 };
 
 pub fn cmpByDueDate(_: void, a: Task, b: Task) bool {
@@ -192,7 +205,7 @@ fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
         return null;
     }
     for (tasks.tasks.items) |*t| {
-        if (t.start != null and interval.start.isBefore(t.start.?)) continue;
+        if (interval.start.isBefore(t.start)) continue;
         if (tasks.getFirstTask(t, interval.start)) |ret| {
             ret.is_due_dep = (t.due != null);
             return ret;
@@ -208,9 +221,11 @@ pub const Scheduler = struct {
     intervals: IntervalIterator,
 
     pub fn init(allocator: std.mem.Allocator, events: []Event, tl: TaskList) !Self {
+        const intervals = try IntervalIterator.init(allocator, events, tl);
+        // TODO: Check correctness of intervals
         return .{
             .allocator = allocator,
-            .intervals = try IntervalIterator.init(allocator, events, tl),
+            .intervals = intervals,
         };
     }
 
@@ -237,7 +252,7 @@ pub const Scheduler = struct {
             var step = best.time;
             // NOTE: The appends from now on will invalidate `best`
             if (interval.end) |e| {
-                if (e.isBefore(best.getEnd().?)) {
+                if (e.isBefore(best.getEnd())) {
                     var copy = best.*;
                     best.time = e.timeSince(interval.start);
                     step = best.time;
@@ -247,23 +262,31 @@ pub const Scheduler = struct {
                 }
             }
             try scheduled.tasks.append(best.*);
+            if (!best.getEnd().?.eql(best.getEnd().?.getDayStart()))
+                std.debug.assert(best.scheduled_start.?.getDay() == best.getEnd().?.getDay());
             if (!unscheduled.remove(best)) unreachable;
             interval = self.intervals.next(step) orelse return scheduled;
         }
 
+        // Merge intervals
         var i: usize = 0;
         while (i < scheduled.tasks.items.len - 1) { // Yes, we ignore the last element
             const cur = &scheduled.tasks.items[i];
             const next = scheduled.tasks.items[i + 1];
             i += 1;
-            if (cur.id != next.id) continue;
+            if (cur.id != next.id) continue; // Don't merge different tasks
+            const cur_end = cur.getEnd().?;
+            // Don't merge tasks that cross midnight
+            if (cur_end.eql(cur_end.getDayStart())) continue;
 
-            if (next.scheduled_start.?.isBeforeEq(cur.getEnd().?)) {
+            if (next.scheduled_start.?.eql(cur_end)) {
                 cur.time = cur.time.add(next.time);
                 _ = scheduled.tasks.orderedRemove(i);
                 i -= 1;
             }
         }
+
+        try scheduled.checkOverlap();
 
         return scheduled;
     }
