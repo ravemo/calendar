@@ -99,43 +99,45 @@ const IntervalIterator = struct {
             } else break; // since the list is sorted, there isn't any more starts
         }
 
+        // Test for holes
+        {
+            var last_end = self.intervals.items[0].end;
+            for (self.intervals.items[1..], 1..) |int, i| {
+                if (i < self.intervals.items.len - 1) std.debug.assert(int.end != null);
+                std.debug.assert(int.start.eql(last_end.?));
+                last_end = int.end;
+            }
+            std.debug.assert(last_end == null);
+        }
+
         // Remove event intervals from interval list
-        var i: usize = 0;
-        var e_opt = events.next(limit);
-        while (i < self.intervals.items.len) {
-            if (e_opt) |e| {
-                const interval = &self.intervals.items[i];
-                if (limit.isBefore(interval.start)) break;
+        while (events.next(limit)) |e| {
+            if (limit.isBefore(getInterval(e).start)) break;
+            try self.remove(getInterval(e), limit);
+        }
+        for (self.intervals.items) |*int| {
+            int.start.update();
+            if (int.end) |*e| e.update();
+        }
 
-                if (interval.end != null and interval.end.?.isBefore(e_opt.?.start)) {
-                    i += 1;
-                    continue;
-                }
+        try self.checkOverlaps();
 
-                if (limit.isBefore(e.start)) continue;
-
-                const e_int = getInterval(e);
-
-                if (interval.isInside(e_int)) {
-                    _ = self.intervals.orderedRemove(i);
+        // Test for holes, taking into consideration the events
+        if (self.intervals.items.len > 1) {
+            std.debug.print("{}\n", .{self.intervals.items.len});
+            var last_end = self.intervals.items[0].end.?;
+            for (self.intervals.items[1 .. self.intervals.items.len - 1]) |int| {
+                std.debug.assert(int.end != null);
+                std.debug.assert(int.start.eql(last_end));
+                if (!int.start.eql(last_end)) {
+                    events.reset(int.start);
+                    const event = events.next(limit) orelse @panic("Oh no!");
+                    std.debug.assert(event.start.eql(last_end));
+                    last_end = event.getEnd();
                 } else {
-                    const subtract_info = interval.subtract(e_int);
-                    if (subtract_info.extra) |extra| {
-                        i += 1;
-                        try self.intervals.insert(i, extra);
-                        e_opt = events.next(limit);
-                        continue;
-                    }
-
-                    if (!subtract_info.changed) {
-                        if (e_int.endsEarlierThan(interval.*)) {
-                            e_opt = events.next(limit);
-                        } else {
-                            i += 1;
-                        }
-                    }
+                    last_end = int.end.?;
                 }
-            } else break;
+            }
         }
 
         return self;
@@ -145,30 +147,56 @@ const IntervalIterator = struct {
         self.intervals.deinit();
     }
 
-    fn next(self: *Self, step: Time) ?Interval {
-        var cur = &self.intervals.items[0];
-        var sub_time = step;
-        while (true) {
-            cur = &self.intervals.items[0];
-            const next_start = cur.start.after(sub_time);
-            if (cur.end) |e| {
-                if (e.isBeforeEq(next_start)) {
-                    sub_time = sub_time.sub(e.timeSince(cur.start));
-                    _ = self.intervals.orderedRemove(0);
-                    if (self.intervals.items.len == 0) return null;
-                    continue;
-                }
-            }
-            cur.start = next_start;
-            break;
-        }
+    fn next(self: *Self, step: Time) !?Interval {
+        const first = self.intervals.items[0];
+        first.print();
+        self.remove(Interval{
+            .start = first.start,
+            .end = first.start.after(step),
+        }, null) catch unreachable;
+        const cur = &self.intervals.items[0];
+        cur.print();
 
         // Split at day transition
         const day_end = cur.start.after(.{ .days = 1 }).getDayStart();
-        if (day_end.isBefore(cur.end.?))
-            cur.end = day_end;
+        if (day_end.isBefore(cur.end)) {
+            const ret = Interval{ .start = cur.start, .end = day_end };
+            cur.start = day_end;
+            try self.intervals.insert(0, ret);
+            return ret;
+        }
 
         return cur.*;
+    }
+
+    fn remove(self: *Self, toRemove: Interval, limit: ?Date) !void {
+        var i: usize = 0;
+        while (i < self.intervals.items.len) {
+            const interval = &self.intervals.items[i];
+            if (limit != null and limit.?.isBefore(interval.start)) break;
+
+            if (interval.end != null and interval.end.?.isBefore(toRemove.start)) {
+                i += 1;
+                continue;
+            }
+
+            if (interval.isInside(toRemove)) {
+                _ = self.intervals.orderedRemove(i);
+            } else {
+                const subtract_info = interval.subtract(toRemove);
+                if (subtract_info.extra) |extra| {
+                    i += 1;
+                    std.debug.print("{any}\n", .{extra});
+                    try self.intervals.insert(i, extra);
+                } else if (!subtract_info.changed) {
+                    if (!toRemove.endsEarlierThan(interval.*)) {
+                        i += 1;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     fn checkOverlaps(self: Self) !void {
@@ -265,7 +293,7 @@ pub const Scheduler = struct {
             if (!best.getEnd().?.eql(best.getEnd().?.getDayStart()))
                 std.debug.assert(best.scheduled_start.?.getDay() == best.getEnd().?.getDay());
             if (!unscheduled.remove(best)) unreachable;
-            interval = self.intervals.next(step) orelse return scheduled;
+            interval = try self.intervals.next(step) orelse return scheduled;
         }
 
         // Merge intervals

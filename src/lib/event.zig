@@ -111,6 +111,7 @@ pub const EventIterator = struct {
     const Self = @This();
     events: std.ArrayList(Event),
     time: Date,
+    i: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator, events: []Event, start: Date) !Self {
         var new_events = std.ArrayList(Event).init(allocator);
@@ -123,24 +124,21 @@ pub const EventIterator = struct {
         self.events.deinit();
     }
 
-    pub fn finishEvent(self: *Self, event: Event) void {
-        if (event.repeat) |repeat| {
-            // TODO Handle repeat_start and repeat_end
-            var new_event: Event = event;
-            new_event.start = new_event.start.after(repeat.period.time);
-            _ = self.events.orderedRemove(0);
-            appendSorted(&self.events, new_event) catch unreachable;
-        } else {
-            _ = self.events.orderedRemove(0);
-        }
+    pub fn reset(self: *Self, start: Date) void {
+        self.time = start;
+        self.i = 0;
     }
+
     pub fn next(self: *Self, end: Date) ?Event {
-        var cur_event = self.events.items[0];
+        if (self.events.items.len == 0) return null;
+        var cur_event = self.events.items[self.i];
         while (cur_event.getEnd().isBefore(self.time)) {
-            self.finishEvent(cur_event);
-            cur_event = self.events.items[0];
+            self.time = cur_event.getEnd();
+            self.i += 1;
+            cur_event = self.events.items[self.i];
         }
-        self.finishEvent(cur_event);
+        self.time = cur_event.getEnd();
+        self.i += 1;
 
         if (end.isBeforeEq(cur_event.start)) return null;
 
