@@ -3,7 +3,7 @@ const std = @import("std");
 pub fn buildGUI(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Run {
     const exe = b.addExecutable(.{
         .name = "Calendar",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -80,7 +80,7 @@ pub fn build(b: *std.Build) void {
 
     // Test step
     const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });

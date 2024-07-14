@@ -16,12 +16,10 @@
     // internet connectivity.
     .dependencies = .{
         .linenoise = .{
-            .url = "lib/linenoize/",
-            .hash = "12207fe22dacc23867d3d9e00f89655bd06fd20fc1f972623b9e3ead69cd58f57c5d",
+            .path = "lib/linenoize/",
         },
         .regex = .{
-            .url = "lib/zig-regex/",
-            .hash = "122094100f9d7ea0b8ef467a16ea5535e80994cd26178be68bf45aa2a2619a04e7e2",
+            .path = "lib/zig-regex/",
         },
     },
     .paths = .{
