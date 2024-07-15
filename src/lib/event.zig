@@ -57,7 +57,6 @@ pub const EventList = struct {
         for (events.items) |*t| {
             try event_names.append(t.name); // It is owned here now
         }
-        std.debug.print("Loaded {} events.\n", .{events.items.len});
         return .{
             .events = events,
             .event_names = event_names,
@@ -129,16 +128,28 @@ pub const EventIterator = struct {
         self.i = 0;
     }
 
+    pub fn finishEvent(self: *Self) void {
+        const event = self.events.items[self.i];
+        if (event.repeat) |repeat| {
+            // TODO Handle repeat_start and repeat_end
+            var new_event = event;
+            new_event.start = new_event.start.after(repeat.period.time);
+            _ = self.events.orderedRemove(self.i);
+            appendSorted(&self.events, new_event) catch unreachable;
+        } else {
+            self.i += 1;
+        }
+        self.time = event.getEnd();
+    }
+
     pub fn next(self: *Self, end: Date) ?Event {
         if (self.events.items.len == 0) return null;
         var cur_event = self.events.items[self.i];
         while (cur_event.getEnd().isBefore(self.time)) {
-            self.time = cur_event.getEnd();
-            self.i += 1;
+            self.finishEvent();
             cur_event = self.events.items[self.i];
         }
-        self.time = cur_event.getEnd();
-        self.i += 1;
+        self.finishEvent();
 
         if (end.isBeforeEq(cur_event.start)) return null;
 

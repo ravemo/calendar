@@ -5,6 +5,7 @@ const Date = datetime.Date;
 const event_lib = @import("event.zig");
 const Event = event_lib.Event;
 const Database = @import("database.zig").Database;
+const Interval = @import("scheduler.zig").Interval;
 
 pub const Task = struct {
     const Self = @This();
@@ -81,6 +82,8 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
             if (false) std.debug.print("Unhandled column: {s}\n", .{col});
         }
     }
+
+    // if (time != null) std.debug.assert(time.?.getSeconds() != 0);
 
     tasks.append(.{
         .id = id,

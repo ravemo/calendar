@@ -115,30 +115,8 @@ const IntervalIterator = struct {
             if (limit.isBefore(getInterval(e).start)) break;
             try self.remove(getInterval(e), limit);
         }
-        for (self.intervals.items) |*int| {
-            int.start.update();
-            if (int.end) |*e| e.update();
-        }
 
         try self.checkOverlaps();
-
-        // Test for holes, taking into consideration the events
-        if (self.intervals.items.len > 1) {
-            std.debug.print("{}\n", .{self.intervals.items.len});
-            var last_end = self.intervals.items[0].end.?;
-            for (self.intervals.items[1 .. self.intervals.items.len - 1]) |int| {
-                std.debug.assert(int.end != null);
-                std.debug.assert(int.start.eql(last_end));
-                if (!int.start.eql(last_end)) {
-                    events.reset(int.start);
-                    const event = events.next(limit) orelse @panic("Oh no!");
-                    std.debug.assert(event.start.eql(last_end));
-                    last_end = event.getEnd();
-                } else {
-                    last_end = int.end.?;
-                }
-            }
-        }
 
         return self;
     }
@@ -149,13 +127,13 @@ const IntervalIterator = struct {
 
     fn next(self: *Self, step: Time) !?Interval {
         const first = self.intervals.items[0];
-        first.print();
-        self.remove(Interval{
-            .start = first.start,
-            .end = first.start.after(step),
-        }, null) catch unreachable;
+        if (step.getSeconds() > 0) {
+            self.remove(Interval{
+                .start = first.start,
+                .end = first.start.after(step),
+            }, null) catch unreachable;
+        }
         const cur = &self.intervals.items[0];
-        cur.print();
 
         // Split at day transition
         const day_end = cur.start.after(.{ .days = 1 }).getDayStart();
@@ -186,7 +164,6 @@ const IntervalIterator = struct {
                 const subtract_info = interval.subtract(toRemove);
                 if (subtract_info.extra) |extra| {
                     i += 1;
-                    std.debug.print("{any}\n", .{extra});
                     try self.intervals.insert(i, extra);
                 } else if (!subtract_info.changed) {
                     if (!toRemove.endsEarlierThan(interval.*)) {
@@ -250,7 +227,6 @@ pub const Scheduler = struct {
 
     pub fn init(allocator: std.mem.Allocator, events: []Event, tl: TaskList) !Self {
         const intervals = try IntervalIterator.init(allocator, events, tl);
-        // TODO: Check correctness of intervals
         return .{
             .allocator = allocator,
             .intervals = intervals,
