@@ -113,9 +113,6 @@ pub fn main() !void {
     var dragging_start_x: f32 = undefined;
     var dragging_start_y: f32 = undefined;
 
-    var holding_shift = false;
-    var holding_ctrl = false;
-
     {
         var wake_event = std.mem.zeroes(c.SDL_Event);
         wake_event.type = wakeEvent;
@@ -131,6 +128,7 @@ pub fn main() !void {
         var ev: c.SDL_Event = undefined;
 
         _ = c.SDL_WaitEvent(&ev);
+        const keystates = c.SDL_GetKeyboardState(null);
         while (true) {
             switch (ev.type) {
                 c.SDL_QUIT => break :mainLoop,
@@ -144,8 +142,6 @@ pub fn main() !void {
                             weekview.start = weekview.start.after(.{ .weeks = d_weeks });
                         }
                     },
-                    c.SDL_SCANCODE_LSHIFT => holding_shift = true,
-                    c.SDL_SCANCODE_LCTRL => holding_ctrl = true,
                     c.SDL_SCANCODE_F5 => update = true,
                     c.SDL_SCANCODE_Z => {
                         update = true;
@@ -155,13 +151,11 @@ pub fn main() !void {
                     else => {},
                 },
                 c.SDL_KEYUP => switch (ev.key.keysym.scancode) {
-                    c.SDL_SCANCODE_LSHIFT => holding_shift = false,
-                    c.SDL_SCANCODE_LCTRL => holding_ctrl = false,
                     else => {},
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
                     tooltip = null;
-                    if (holding_ctrl) {
+                    if (keystates[c.SDL_SCANCODE_LCTRL] != 0x00) {
                         cursor.setHourF(weekview.sf.hourFromY(@as(f32, @floatFromInt(ev.button.y)) - weekview.sf.y));
                     } else if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
                         for (events.events.items) |*e| {
@@ -218,7 +212,7 @@ pub fn main() !void {
                     }
                 },
                 c.SDL_MOUSEWHEEL => {
-                    if (holding_shift) {
+                    if (keystates[c.SDL_SCANCODE_LSHIFT] != 0x00) {
                         hours_surface.zoomIn(ev.wheel.preciseY * 3);
                         weekview.sf.zoomIn(ev.wheel.preciseY * 3);
                     } else {
