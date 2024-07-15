@@ -20,6 +20,7 @@ pub const Task = struct {
     // TODO: Tasks should be able to be split, so we need scheduled_time
     deps: [32]?i32 = .{null} ** 32,
     is_due_dep: bool = false,
+    depth: i32,
 
     pub fn getEnd(self: Self) ?Date {
         return if (self.scheduled_start) |s| s.after(self.time) else self.due;
@@ -95,8 +96,6 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
         }
     }
 
-    // if (time != null) std.debug.assert(time.?.getSeconds() != 0);
-
     tasks.append(.{
         .id = id,
         .parent = parent,
@@ -106,7 +105,24 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
         .due = due,
         .scheduled_start = null,
         .deps = deps,
+        .depth = if (parent == null) 0 else -1,
     }) catch return -1;
+
+    // Set correct depth of tasks
+    while (true) {
+        var changed = false;
+        for (tasks.items) |*i| {
+            if (i.depth != -1) continue;
+            for (tasks.items) |j| {
+                if (i.parent == j.id and j.depth != -1) {
+                    i.depth = j.depth + 1;
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (!changed) break;
+    }
     return 0;
 }
 

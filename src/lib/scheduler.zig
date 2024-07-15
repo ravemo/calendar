@@ -191,17 +191,17 @@ const IntervalIterator = struct {
 };
 
 pub fn cmpByDueDate(_: void, a: Task, b: Task) bool {
-    if (b.due) |bd| {
-        return if (a.due) |ad| return ad.isBefore(bd) else false;
-    } else if (a.due) |_| {
-        return true;
-    } else return false;
+    if (a.due) |ad| {
+        return ad.isBefore(b.due);
+    } else if (b.due) |_| {
+        return false;
+    } else return a.depth < b.depth;
 }
 pub fn cmpByStartDate(_: void, a: Task, b: Task) bool {
-    if (b.start) |bs| {
-        return if (a.start) |as| return as.isBefore(bs) else false;
-    } else if (a.start) |_| {
-        return true;
+    if (a.start) |as| {
+        return as.isBefore(b.start);
+    } else if (b.start) |_| {
+        return false;
     } else return false;
 }
 
