@@ -195,6 +195,12 @@ pub fn cmpByDueDate(_: void, a: Task, b: Task) bool {
         return ad.isBefore(b.due);
     } else if (b.due) |_| {
         return false;
+    } else if (a.depth == b.depth) {
+        if (a.gauge) |ag| {
+            return if (b.gauge) |bg| ag < bg else false;
+        } else {
+            return b.gauge != null;
+        }
     } else return a.depth < b.depth;
 }
 pub fn cmpByStartDate(_: void, a: Task, b: Task) bool {
