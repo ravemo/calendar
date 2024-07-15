@@ -102,11 +102,21 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
         }
     }
 
+    if (time == null) {
+        time = .{ .seconds = 2 * 60 * 60 };
+        if (start != null and due != null) {
+            const max_time = due.?.timeSince(start.?);
+            if (max_time.getSeconds() < time.?.getSeconds()) {
+                time = max_time;
+            }
+        }
+    }
+
     tasks.append(.{
         .id = id,
         .parent = parent,
         .name = allocator.dupe(u8, name_addr) catch unreachable,
-        .time = time orelse .{ .seconds = 2 * 60 * 60 },
+        .time = time.?,
         .start = start,
         .due = due,
         .scheduled_start = null,
@@ -187,10 +197,9 @@ pub const TaskList = struct {
     }
 
     pub fn getById(self: Self, id: i32) ?*Task {
-        for (self.tasks.items) |*t| {
-            if (t.id == id) return t;
-        }
-        return null;
+        return for (self.tasks.items) |*t| {
+            if (t.id == id) break t;
+        } else null;
     }
 
     pub fn getParent(self: Self, task: Task) !?*Task {

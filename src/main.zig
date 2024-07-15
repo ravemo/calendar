@@ -49,7 +49,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{
         .enable_memory_limit = true,
     }){ .requested_memory_limit = 1024 * 1024 * 10 };
-    const allocator = gpa.allocator();
+    const alloc = gpa.allocator();
     defer _ = gpa.deinit();
 
     // SDL-related stuff
@@ -86,20 +86,20 @@ pub fn main() !void {
     // TODO: Use proper user_data_dir-like function when releasing to the public
     const tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
     defer tasks_db.deinit();
-    var events = try EventList.init(allocator, events_db);
+    var events = try EventList.init(alloc, events_db);
     defer events.deinit();
-    var base_tasks = try TaskList.init(allocator, tasks_db);
+    var base_tasks = try TaskList.init(alloc, tasks_db);
     defer base_tasks.deinit();
     try base_tasks.sanitize();
 
-    var scheduler = try Scheduler.init(allocator, events.events.items, base_tasks, Date.now());
+    var scheduler = try Scheduler.init(alloc, events.events.items, base_tasks, Date.now());
     defer scheduler.deinit();
     var tasks = try scheduler.scheduleTasks(base_tasks);
     defer tasks.deinit();
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
     var days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
-    var weekview = WeekView.init(allocator, renderer, scrn_w, scrn_h);
+    var weekview = WeekView.init(alloc, renderer, scrn_w, scrn_h);
     defer hours_surface.deinit();
     defer days_surface.deinit();
     defer weekview.deinit();
@@ -122,6 +122,7 @@ pub fn main() !void {
     var update = false;
 
     var cursor = Date.now();
+    var tooltip_text: []const u8 = undefined;
     var tooltip: ?Tooltip = null;
     mainLoop: while (true) {
         // Control
@@ -154,7 +155,10 @@ pub fn main() !void {
                     else => {},
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
-                    tooltip = null;
+                    if (tooltip) |_| {
+                        alloc.free(tooltip_text);
+                        tooltip = null;
+                    }
                     if (keystates[c.SDL_SCANCODE_LCTRL] != 0x00) {
                         cursor.setHourF(weekview.sf.hourFromY(@as(f32, @floatFromInt(ev.button.y)) - weekview.sf.y));
                     } else if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
@@ -170,7 +174,7 @@ pub fn main() !void {
                 },
                 c.SDL_MOUSEBUTTONUP => {
                     if (dragging_event) |e_ptr| {
-                        try events_db.updateEvent(allocator, e_ptr.*);
+                        try events_db.updateEvent(alloc, e_ptr.*);
                         dragging_event = null;
                     }
                 },
@@ -196,15 +200,22 @@ pub fn main() !void {
                             ev_ptr.start.setHourF(oev.start.getHourF() + d_hr);
                         }
                     } else {
-                        tooltip = null;
+                        if (tooltip) |_| {
+                            alloc.free(tooltip_text);
+                            tooltip = null;
+                        }
                         c.SDL_SetCursor(normal_cursor);
                         if (weekview.getEventRectBelow(ev.motion.x, ev.motion.y)) |er| {
                             is_dragging_end = weekview.isHoveringEnd(ev.motion.x, ev.motion.y, er);
                             c.SDL_SetCursor(if (is_dragging_end) sizens_cursor else hand_cursor);
                         } else if (weekview.getTaskRectBelow(ev.motion.x, ev.motion.y)) |tr| {
+                            const t = base_tasks.getById(tr.id).?;
+                            tooltip_text = if (t.parent) |parent|
+                                try std.fmt.allocPrint(alloc, "Parent ({}): {s}\n{}: {s}\n", .{ parent, base_tasks.getById(parent).?.name, t.id, t.name })
+                            else
+                                try std.fmt.allocPrint(alloc, "{s}\n", .{t.name});
                             tooltip = .{
-                                .id = tr.id,
-                                .text = tasks.getById(tr.id).?.name,
+                                .text = tooltip_text,
                                 .x = ev.motion.x,
                                 .y = ev.motion.y,
                             };
@@ -232,7 +243,7 @@ pub fn main() !void {
                             weekview.deinit();
                             hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
                             days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
-                            weekview = WeekView.init(allocator, renderer, scrn_w, scrn_h);
+                            weekview = WeekView.init(alloc, renderer, scrn_w, scrn_h);
                             resetZoom(&hours_surface);
                             resetZoom(&weekview.sf);
                         },
@@ -247,9 +258,9 @@ pub fn main() !void {
         if (update) {
             c.SDL_SetCursor(wait_cursor);
             events.deinit();
-            events = try EventList.init(allocator, events_db);
+            events = try EventList.init(alloc, events_db);
             base_tasks.deinit();
-            base_tasks = try TaskList.init(allocator, tasks_db);
+            base_tasks = try TaskList.init(alloc, tasks_db);
             try base_tasks.sanitize();
             try scheduler.reset(events.events.items, base_tasks);
             tasks.deinit();
@@ -261,7 +272,7 @@ pub fn main() !void {
 
         // Drawing
 
-        var events_it = try EventIterator.init(allocator, events.events.items, weekview.start);
+        var events_it = try EventIterator.init(alloc, events.events.items, weekview.start);
         defer events_it.deinit();
         try draw.drawWeek(&weekview, &events_it, tasks.tasks.items, Date.now(), cursor);
         draw.drawHours(hours_surface, Date.now());
@@ -273,11 +284,13 @@ pub fn main() !void {
         days_surface.draw();
         hours_surface.draw();
 
-        if (tooltip) |tt| {
-            try tt.draw(allocator, renderer);
-        }
+        if (tooltip) |tt| try tt.draw(renderer);
 
         c.SDL_RenderPresent(renderer);
+    }
+    if (tooltip) |_| {
+        alloc.free(tooltip_text);
+        tooltip = null;
     }
 }
 

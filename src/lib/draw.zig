@@ -232,12 +232,11 @@ pub fn drawDays(sf: Surface, now: Date) void {
 
 pub const Tooltip = struct {
     const Self = @This();
-    id: i32,
     text: []const u8,
     x: i32,
     y: i32,
 
-    pub fn draw(self: Self, allocator: std.mem.Allocator, renderer: Renderer) !void {
+    pub fn draw(self: Self, renderer: Renderer) !void {
         arc.setColor(renderer, tooltip_bg_color);
         const rect = c.SDL_Rect{
             .x = self.x,
@@ -248,12 +247,9 @@ pub const Tooltip = struct {
         _ = c.SDL_RenderFillRect(renderer, &rect);
 
         arc.setColor(renderer, text_color);
-        var tooltip_text = std.ArrayList(u8).init(allocator);
-        defer tooltip_text.deinit();
-        try tooltip_text.writer().print("{}: {s}\n", .{ self.id, self.text });
         text.drawText(
             renderer,
-            tooltip_text.items,
+            self.text,
             @as(f32, @floatFromInt(self.x)) + 5,
             @as(f32, @floatFromInt(self.y)) - 100 + 5,
             200,
