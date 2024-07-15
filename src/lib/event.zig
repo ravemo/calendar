@@ -108,6 +108,7 @@ pub fn appendSorted(events: *std.ArrayList(Event), to_add: Event) !void {
 
 pub const EventIterator = struct {
     const Self = @This();
+    original_events: std.ArrayList(Event),
     events: std.ArrayList(Event),
     time: Date,
     i: usize = 0,
@@ -116,7 +117,7 @@ pub const EventIterator = struct {
         var new_events = std.ArrayList(Event).init(allocator);
         try new_events.appendSlice(events);
         std.mem.sort(Event, new_events.items, {}, cmpByStartDate);
-        return .{ .events = new_events, .time = start };
+        return .{ .original_events = new_events, .events = new_events, .time = start };
     }
 
     pub fn deinit(self: Self) void {
@@ -124,8 +125,12 @@ pub const EventIterator = struct {
     }
 
     pub fn reset(self: *Self, start: Date) void {
+        self.events = self.original_events;
         self.time = start;
         self.i = 0;
+        while (self.events.items[self.i].getEnd().isBeforeEq(start)) {
+            self.finishEvent();
+        }
     }
 
     pub fn finishEvent(self: *Self) void {

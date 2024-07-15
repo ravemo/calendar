@@ -193,6 +193,7 @@ pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Da
     }
 
     const view_end = wv.start.after(.{ .weeks = 1 });
+    events_it.reset(now);
     while (events_it.next(view_end)) |e|
         try drawEvent(wv, e, now);
 
