@@ -83,7 +83,6 @@ const IntervalIterator = struct {
             .intervals = std.ArrayList(Interval).init(allocator),
         };
         try self.intervals.append(.{ .start = Date.now(), .end = null });
-        const limit = Date.now().after(.{ .weeks = 1 });
 
         // Split intervals at tasks starts
         const sorted_tasks = try tasks.tasks.clone();
@@ -111,6 +110,8 @@ const IntervalIterator = struct {
         }
 
         // Remove event intervals from interval list
+        // TODO: Do this in a lazy manner, i.e. when iterating over intervals
+        const limit = Date.now().after(.{ .weeks = 4 });
         while (events.next(limit)) |e| {
             if (limit.isBefore(getInterval(e).start)) break;
             try self.remove(getInterval(e), limit);
@@ -205,10 +206,6 @@ pub fn cmpByStartDate(_: void, a: Task, b: Task) bool {
 }
 
 fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
-    if (Date.now().after(.{ .weeks = 1 }).isBefore(interval.start)) {
-        std.debug.print("TODO REMOVE ME: Quitting early\n", .{});
-        return null;
-    }
     for (tasks.tasks.items) |*t| {
         if (interval.start.isBefore(t.start)) continue;
         if (tasks.getFirstTask(t, interval.start)) |ret| {
