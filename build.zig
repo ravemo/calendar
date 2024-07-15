@@ -85,6 +85,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    unit_tests.linkSystemLibrary("c");
+    unit_tests.linkSystemLibrary("rt");
+    unit_tests.linkSystemLibrary("SDL2");
+    unit_tests.linkSystemLibrary("SDL2_image");
+    unit_tests.linkSystemLibrary("SDL2_ttf");
+    unit_tests.linkSystemLibrary("SDL2_mixer");
+    unit_tests.linkSystemLibrary("pcre");
+    unit_tests.linkSystemLibrary("sqlite3");
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
     const test_step = b.step("test", "Run unit tests");

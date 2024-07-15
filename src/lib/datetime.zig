@@ -25,6 +25,9 @@ pub const Time = struct {
         const t = Time{ .seconds = seconds };
         return t.toReadable();
     }
+    pub fn initM(hours: i32) Self {
+        return Time.initS(hours * 60).toReadable();
+    }
     pub fn initH(hours: i32) Self {
         return Time.initS(hours * 60 * 60).toReadable();
     }

@@ -10,19 +10,31 @@ const Interval = @import("scheduler.zig").Interval;
 pub const Task = struct {
     const Self = @This();
     id: i32,
-    parent: ?i32,
-    name: []const u8,
+    parent: ?i32 = null,
+    name: []const u8 = "",
     time: Time,
-    start: ?Date,
-    due: ?Date,
+    start: ?Date = null,
+    due: ?Date = null,
     // TODO: repeat info
-    scheduled_start: ?Date,
+    scheduled_start: ?Date = null,
     // TODO: Tasks should be able to be split, so we need scheduled_time
-    deps: [32]?i32,
+    deps: [32]?i32 = .{null} ** 32,
     is_due_dep: bool = false,
 
     pub fn getEnd(self: Self) ?Date {
         return if (self.scheduled_start) |s| s.after(self.time) else self.due;
+    }
+
+    pub fn printInterval(self: Self) void {
+        if (self.scheduled_start) |s| {
+            std.debug.print("(scheduled) ", .{});
+            s.print();
+            std.debug.print(" ~ ", .{});
+            self.getEnd().?.print();
+            std.debug.print("\n", .{});
+        } else {
+            std.debug.print("No scheduled start; time = {any}\n", .{self.time});
+        }
     }
 };
 
@@ -252,8 +264,8 @@ pub const TaskList = struct {
 
     pub fn remove(self: *Self, to_remove: *Task) bool {
         for (self.tasks.items, 0..) |*t, i| {
-            if (t == to_remove) {
-                _ = self.tasks.swapRemove(i);
+            if (t.id == to_remove.id) {
+                _ = self.tasks.orderedRemove(i);
                 return true;
             }
         }

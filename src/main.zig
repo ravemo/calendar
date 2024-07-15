@@ -92,7 +92,7 @@ pub fn main() !void {
     defer base_tasks.deinit();
     try base_tasks.sanitize();
 
-    var scheduler = try Scheduler.init(allocator, events.events.items, base_tasks);
+    var scheduler = try Scheduler.init(allocator, events.events.items, base_tasks, Date.now());
     defer scheduler.deinit();
     var tasks = try scheduler.scheduleTasks(base_tasks);
     defer tasks.deinit();
@@ -284,4 +284,8 @@ pub fn main() !void {
 fn sdlPanic() noreturn {
     const str = @as(?[*:0]const u8, c.SDL_GetError()) orelse "unknown error";
     @panic(std.mem.sliceTo(str, 0));
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }

@@ -76,13 +76,13 @@ const IntervalIterator = struct {
     const Self = @This();
     intervals: std.ArrayList(Interval),
 
-    fn init(allocator: std.mem.Allocator, event_list: []Event, tasks: TaskList) !Self {
-        var events = try EventIterator.init(allocator, event_list, Date.now());
+    fn init(allocator: std.mem.Allocator, event_list: []Event, tasks: TaskList, start: Date) !Self {
+        var events = try EventIterator.init(allocator, event_list, start);
         defer events.deinit();
         var self = Self{
             .intervals = std.ArrayList(Interval).init(allocator),
         };
-        try self.intervals.append(.{ .start = Date.now(), .end = null });
+        try self.intervals.append(.{ .start = start, .end = null });
 
         // Split intervals at tasks starts
         const sorted_tasks = try tasks.tasks.clone();
@@ -111,7 +111,7 @@ const IntervalIterator = struct {
 
         // Remove event intervals from interval list
         // TODO: Do this in a lazy manner, i.e. when iterating over intervals
-        const limit = Date.now().after(.{ .weeks = 4 });
+        const limit = start.after(.{ .weeks = 4 });
         while (events.next(limit)) |e| {
             if (limit.isBefore(getInterval(e).start)) break;
             try self.remove(getInterval(e), limit);
@@ -195,14 +195,14 @@ pub fn cmpByDueDate(_: void, a: Task, b: Task) bool {
         return if (a.due) |ad| return ad.isBefore(bd) else false;
     } else if (a.due) |_| {
         return true;
-    } else return a.id < b.id;
+    } else return false;
 }
 pub fn cmpByStartDate(_: void, a: Task, b: Task) bool {
     if (b.start) |bs| {
         return if (a.start) |as| return as.isBefore(bs) else false;
     } else if (a.start) |_| {
         return true;
-    } else return a.id < b.id;
+    } else return false;
 }
 
 fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
@@ -221,12 +221,14 @@ pub const Scheduler = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     intervals: IntervalIterator,
+    start: Date,
 
-    pub fn init(allocator: std.mem.Allocator, events: []Event, tl: TaskList) !Self {
-        const intervals = try IntervalIterator.init(allocator, events, tl);
+    pub fn init(allocator: std.mem.Allocator, events: []Event, tl: TaskList, start: Date) !Self {
+        const intervals = try IntervalIterator.init(allocator, events, tl, start);
         return .{
             .allocator = allocator,
             .intervals = intervals,
+            .start = start,
         };
     }
 
@@ -236,7 +238,7 @@ pub const Scheduler = struct {
 
     pub fn reset(self: *Self, event_list: []Event, tasks: TaskList) !void {
         self.intervals.deinit();
-        self.intervals = try IntervalIterator.init(self.allocator, event_list, tasks);
+        self.intervals = try IntervalIterator.init(self.allocator, event_list, tasks, self.start);
     }
 
     pub fn scheduleTasks(self: *Self, tl: TaskList) !TaskList {
@@ -256,6 +258,7 @@ pub const Scheduler = struct {
                 if (e.isBefore(best.getEnd())) {
                     var copy = best.*;
                     best.time = e.timeSince(interval.start);
+                    copy.scheduled_start = null;
                     step = best.time;
                     copy.time = copy.time.sub(best.time);
 
@@ -292,3 +295,68 @@ pub const Scheduler = struct {
         return scheduled;
     }
 };
+
+test "Interval check" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{
+        .enable_memory_limit = true,
+    }){ .requested_memory_limit = 1024 * 1024 * 10 };
+    const alloc = gpa.allocator();
+    defer _ = gpa.deinit();
+
+    const now = Date.now();
+
+    const tl = TaskList{
+        .tasks = std.ArrayList(Task).init(alloc),
+        .task_names = std.ArrayList([]const u8).init(alloc),
+        .allocator = alloc,
+    };
+    defer tl.deinit();
+
+    const events = [0]Event{};
+
+    const intervals = try IntervalIterator.init(alloc, &events, tl, now);
+    defer intervals.deinit();
+    try std.testing.expectEqual(1, intervals.intervals.items.len);
+    try std.testing.expectEqual(now, intervals.intervals.items[0].start);
+    try std.testing.expectEqual(null, intervals.intervals.items[0].end);
+}
+
+test "Start cut" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{
+        .enable_memory_limit = true,
+    }){ .requested_memory_limit = 1024 * 1024 * 10 };
+    const alloc = gpa.allocator();
+    defer _ = gpa.deinit();
+
+    const now = Date.now();
+    const task1 = .{ .id = 0, .time = Time.initH(2), .start = now };
+    const task2 = .{ .id = 1, .time = Time.initH(1), .start = now.after(Time.initH(1)) };
+    var tasks = std.ArrayList(Task).init(alloc);
+    try tasks.append(task1);
+    try tasks.append(task2);
+
+    const tl = TaskList{
+        .tasks = tasks,
+        .task_names = std.ArrayList([]const u8).init(alloc),
+        .allocator = alloc,
+    };
+    defer tl.deinit();
+    const events = [0]Event{};
+
+    var scheduler = try Scheduler.init(alloc, &events, tl, now);
+    try std.testing.expectEqual(2, scheduler.intervals.intervals.items.len);
+    defer scheduler.deinit();
+
+    const new_tl = try scheduler.scheduleTasks(tl);
+    defer new_tl.deinit();
+
+    try std.testing.expectEqual(3, new_tl.tasks.items.len);
+
+    try std.testing.expectEqual(0, new_tl.tasks.items[0].id);
+    try std.testing.expectEqual(1, new_tl.tasks.items[1].id);
+    try std.testing.expectEqual(0, new_tl.tasks.items[2].id);
+
+    try std.testing.expectEqual(60 * 60, new_tl.tasks.items[0].time.getSeconds());
+    try std.testing.expectEqual(60 * 60, new_tl.tasks.items[1].time.getSeconds());
+    try std.testing.expectEqual(60 * 60, new_tl.tasks.items[2].time.getSeconds());
+}
