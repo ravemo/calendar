@@ -31,14 +31,20 @@ var scrn_w: f32 = 800;
 var scrn_h: f32 = 600;
 
 var wakeEvent: u32 = undefined;
-fn resetZoom(sf: *Surface) void {
-    const last_hour_center = sf.hourFromY(sf.h / 2);
+
+fn resetZoomTo(sf: *Surface, hourF: f32) void {
     sf.zoom = 0;
     sf.zoomIn(60);
     sf.sy = 0;
-    const sy = sf.h / 2 - sf.yFromHour(last_hour_center);
+    const sy = sf.h / 2 - sf.yFromHour(hourF);
     sf.scroll(sy);
 }
+
+fn resetZoom(sf: *Surface) void {
+    const last_hour_center = sf.hourFromY(sf.h / 2);
+    resetZoomTo(sf, last_hour_center);
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{
         .enable_memory_limit = true,
@@ -141,10 +147,16 @@ pub fn main() !void {
                     c.SDL_SCANCODE_LSHIFT => holding_shift = true,
                     c.SDL_SCANCODE_LCTRL => holding_ctrl = true,
                     c.SDL_SCANCODE_F5 => update = true,
+                    c.SDL_SCANCODE_Z => {
+                        update = true;
+                        resetZoomTo(&hours_surface, Date.now().getHourF());
+                        resetZoomTo(&weekview.sf, Date.now().getHourF());
+                    },
                     else => {},
                 },
                 c.SDL_KEYUP => switch (ev.key.keysym.scancode) {
                     c.SDL_SCANCODE_LSHIFT => holding_shift = false,
+                    c.SDL_SCANCODE_LCTRL => holding_ctrl = false,
                     else => {},
                 },
                 c.SDL_MOUSEBUTTONDOWN => {
@@ -190,13 +202,9 @@ pub fn main() !void {
                             ev_ptr.start.setHourF(oev.start.getHourF() + d_hr);
                         }
                     } else {
+                        tooltip = null;
+                        c.SDL_SetCursor(normal_cursor);
                         if (weekview.getEventRectBelow(ev.motion.x, ev.motion.y)) |er| {
-                            tooltip = .{
-                                .id = er.id,
-                                .text = "",
-                                .x = ev.motion.x,
-                                .y = ev.motion.y,
-                            };
                             is_dragging_end = weekview.isHoveringEnd(ev.motion.x, ev.motion.y, er);
                             c.SDL_SetCursor(if (is_dragging_end) sizens_cursor else hand_cursor);
                         } else if (weekview.getTaskRectBelow(ev.motion.x, ev.motion.y)) |tr| {
@@ -206,9 +214,6 @@ pub fn main() !void {
                                 .x = ev.motion.x,
                                 .y = ev.motion.y,
                             };
-                        } else {
-                            tooltip = null;
-                            c.SDL_SetCursor(normal_cursor);
                         }
                     }
                 },

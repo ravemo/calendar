@@ -29,11 +29,10 @@ pub const Database = struct {
         return executeCB(self, query, null, null);
     }
     pub fn executeCB(self: Self, query: [:0]const u8, cb: ?*const QueryCallback, userdata: ?*anyopaque) !void {
-        print("Running query: \"{s}\"\n", .{query});
         var errmsg: [*c]u8 = undefined;
         if (c.SQLITE_OK != c.sqlite3_exec(self.db, query, cb, userdata, &errmsg)) {
             defer c.sqlite3_free(errmsg);
-            std.debug.print("Exec query failed: {s}\n", .{errmsg});
+            print("Exec query failed: {s}\n", .{errmsg});
             return error.execError;
         }
         return;
@@ -70,28 +69,28 @@ pub const Database = struct {
 
     pub fn bindText(self: Self, idx: i32, text: []const u8) !void {
         if (c.sqlite3_bind_text(self.res, idx, @ptrCast(text), @intCast(text.len), c.SQLITE_STATIC) != c.SQLITE_OK) {
-            std.debug.print("Couldn't bind variable {}\n", .{idx});
+            print("Couldn't bind variable {}\n", .{idx});
             return error.BindError;
         }
     }
 
     pub fn bindInt(self: Self, idx: i32, int: i32) !void {
         if (c.sqlite3_bind_int(self.res, idx, int) != c.SQLITE_OK) {
-            std.debug.print("Couldn't bind variable {}\n", .{idx});
+            print("Couldn't bind variable {}\n", .{idx});
             return error.BindError;
         }
     }
 
     pub fn bindNull(self: Self, idx: i32) !void {
         if (c.sqlite3_bind_null(self.res, idx) != c.SQLITE_OK) {
-            std.debug.print("Couldn't bind variable {}\n", .{idx});
+            print("Couldn't bind variable {}\n", .{idx});
             return error.BindError;
         }
     }
 
     pub fn executeAndFinish(self: Self) !void {
         if (c.sqlite3_step(self.res) != c.SQLITE_DONE) {
-            std.debug.print("Couldn't execute query\n", .{});
+            print("Couldn't execute query\n", .{});
             return error.StepError;
         }
         _ = c.sqlite3_reset(self.res);
