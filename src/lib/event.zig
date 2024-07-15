@@ -33,6 +33,7 @@ pub const Event = struct {
         new.start.setDate(day);
         return new;
     }
+
     pub fn atWeekday(self: Self, wday: Weekday) Self {
         var new = self;
         new.start.setWeekday(wday);
@@ -41,6 +42,14 @@ pub const Event = struct {
 
     pub fn getEnd(self: Self) Date {
         return self.start.after(self.duration);
+    }
+
+    pub fn print(self: Self) void {
+        std.debug.print("{}: {s} | ", .{ self.id, self.name });
+        self.start.print();
+        std.debug.print(" ~ ", .{});
+        self.getEnd().print();
+        std.debug.print("\n", .{});
     }
 };
 
@@ -155,7 +164,6 @@ pub const EventIterator = struct {
             cur_event = self.events.items[self.i];
         }
         self.finishEvent();
-
         if (end.isBeforeEq(cur_event.start)) return null;
 
         return cur_event;

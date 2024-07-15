@@ -38,21 +38,21 @@ pub fn drawGrid(sf: Surface) void {
     }
 }
 
-pub fn drawSingleEvent(wv: *WeekView, event: Event) !void {
+pub fn drawEvent(wv: *WeekView, event: Event) !void {
     const renderer = wv.sf.renderer;
     // if the event crosses the day boundary, but does not end at midnight
     if (event.start.getDayStart().isBefore(event.getEnd().getDayStart()) and
-        event.getEnd().getDayStart().secondsSince(event.getEnd()) != 0)
+        !event.getEnd().getDayStart().eql(event.getEnd()))
     {
         const split = event.start.after(.{ .days = 1 }).getDayStart();
         var head = event;
         head.duration = split.timeSince(event.start);
-        try drawSingleEvent(wv, head);
+        try drawEvent(wv, head);
 
         var tail = event;
         tail.start = split;
         tail.duration = tail.duration.sub(head.duration);
-        try drawSingleEvent(wv, tail);
+        try drawEvent(wv, tail);
         return;
     }
 
@@ -87,38 +87,6 @@ pub fn drawSingleEvent(wv: *WeekView, event: Event) !void {
 
     arc.setColor(renderer, text_color);
     text.drawText(renderer, draw_event.name, x + 2, y + 2, rect.w - 4, .Left, .Top);
-}
-pub fn drawEvent(wv: *WeekView, event: Event, now: Date) !void {
-    _ = now; // TODO: Draw events greyed-out if they are already past
-    const view_start = wv.start;
-    const view_end = wv.start.after(.{ .weeks = 1 });
-
-    if (event.repeat) |repeat| {
-        switch (repeat.period) {
-            // TODO: Refactor DateIter so we can support more than weekly repeats
-            // Yes. DateIter is not working. You probably have to do the
-            // 'repeating task' vs 'normal task' thing.
-            // It will be two birds with one stone.
-            .time => |_| blk: {
-                const e = event.atDay(view_start).atWeekday(@enumFromInt(event.start.getWeekday()));
-                if (e.getEnd().isBefore(view_start)) break :blk;
-                if (view_end.isBefore(e.start)) break :blk;
-                try drawSingleEvent(wv, e);
-            },
-            .pattern => |p| {
-                // TODO use arrays?
-                if (p.sun) try drawSingleEvent(wv, event.atWeekday(.Sunday));
-                if (p.mon) try drawSingleEvent(wv, event.atWeekday(.Monday));
-                if (p.tue) try drawSingleEvent(wv, event.atWeekday(.Tuesday));
-                if (p.wed) try drawSingleEvent(wv, event.atWeekday(.Wednesday));
-                if (p.thu) try drawSingleEvent(wv, event.atWeekday(.Thursday));
-                if (p.fri) try drawSingleEvent(wv, event.atWeekday(.Friday));
-                if (p.sat) try drawSingleEvent(wv, event.atWeekday(.Saturday));
-            },
-        }
-    } else {
-        try drawSingleEvent(wv, event);
-    }
 }
 
 pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
@@ -193,9 +161,9 @@ pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Da
     }
 
     const view_end = wv.start.after(.{ .weeks = 1 });
-    events_it.reset(now);
+    events_it.reset(wv.start);
     while (events_it.next(view_end)) |e|
-        try drawEvent(wv, e, now);
+        try drawEvent(wv, e);
 
     for (tasks) |t|
         try drawTask(wv, t, now);
