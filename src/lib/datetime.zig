@@ -297,6 +297,12 @@ pub const Date = struct {
         });
     }
 
+    pub fn earliest(a_opt: ?Date, b: ?Date) ?Date {
+        if (a_opt) |a| {
+            return if (a.isBefore(b)) a else b;
+        } else return b;
+    }
+
     pub fn getWeekStart(self: Self) Date {
         var new_tm = self.tm;
         new_tm.tm_mday = new_tm.tm_mday - new_tm.tm_wday;

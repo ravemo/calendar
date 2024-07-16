@@ -19,7 +19,7 @@ pub const Task = struct {
     scheduled_start: ?Date = null,
     // TODO: Tasks should be able to be split, so we need scheduled_time
     deps: [32]?i32 = .{null} ** 32,
-    is_due_dep: bool = false,
+    earliest_due: ?Date,
     depth: i32,
     gauge: ?i32,
 
@@ -119,6 +119,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
         .time = time.?,
         .start = start,
         .due = due,
+        .earliest_due = due,
         .scheduled_start = null,
         .deps = deps,
         .depth = if (parent == null) 0 else -1,

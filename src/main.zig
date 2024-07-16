@@ -262,7 +262,7 @@ pub fn main() !void {
             base_tasks.deinit();
             base_tasks = try TaskList.init(alloc, tasks_db);
             try base_tasks.sanitize();
-            try scheduler.reset(events.events.items, base_tasks);
+            try scheduler.reset(events.events.items, base_tasks, Date.now());
             tasks.deinit();
             tasks = try scheduler.scheduleTasks(base_tasks);
             cursor = Date.now();

@@ -88,15 +88,11 @@ const IntervalIterator = struct {
         const sorted_tasks = try tasks.tasks.clone();
         defer sorted_tasks.deinit();
         std.mem.sort(Task, sorted_tasks.items, {}, cmpByStartDate);
-        for (sorted_tasks.items) |t| {
-            if (t.start) |s| {
-                const i = &self.intervals.items[self.intervals.items.len - 1];
-                if (s.isBeforeEq(i.start)) continue;
-                i.end = s;
-                std.debug.assert(i.start.isBefore(s));
-                try self.intervals.append(.{ .start = s, .end = null });
-            } else break; // since the list is sorted, there isn't any more starts
-        }
+        for (sorted_tasks.items) |t|
+            if (t.start) |s| try self.split(s);
+
+        for (tasks.tasks.items) |t|
+            if (t.due) |d| try self.split(d);
 
         // Test for holes
         {
@@ -177,6 +173,19 @@ const IntervalIterator = struct {
         }
     }
 
+    fn split(self: *Self, s: Date) !void {
+        for (self.intervals.items, 0..) |*interval, i| {
+            if (s.isBeforeEq(interval.start)) continue;
+            if (interval.end) |e| {
+                if (e.isBeforeEq(s)) continue;
+            }
+            const last_end = interval.end;
+            interval.end = s;
+            try self.intervals.insert(i + 1, .{ .start = s, .end = last_end });
+            return;
+        }
+    }
+
     fn checkOverlaps(self: Self) !void {
         var last_end = self.intervals.items[0].end;
         for (self.intervals.items[1..], 1..) |int, i| {
@@ -214,8 +223,9 @@ pub fn cmpByStartDate(_: void, a: Task, b: Task) bool {
 fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
     for (tasks.tasks.items) |*t| {
         if (interval.start.isBefore(t.start)) continue;
+        if (t.earliest_due != null and t.earliest_due.?.isBefore(interval.start)) continue;
         if (tasks.getFirstTask(t, interval.start)) |ret| {
-            ret.is_due_dep = (t.due != null);
+            ret.earliest_due = Date.earliest(ret.earliest_due, t.earliest_due);
             return ret;
         }
     }
@@ -242,7 +252,8 @@ pub const Scheduler = struct {
         self.intervals.deinit();
     }
 
-    pub fn reset(self: *Self, event_list: []Event, tasks: TaskList) !void {
+    pub fn reset(self: *Self, event_list: []Event, tasks: TaskList, start: Date) !void {
+        self.start = start;
         self.intervals.deinit();
         self.intervals = try IntervalIterator.init(self.allocator, event_list, tasks, self.start);
     }
@@ -258,19 +269,22 @@ pub const Scheduler = struct {
             std.mem.sort(Task, unscheduled.tasks.items, {}, cmpByDueDate);
             const best: *Task = getBestTask(interval, &unscheduled) orelse break;
             best.scheduled_start = interval.start;
-            var step = best.time;
             // NOTE: The appends from now on will invalidate `best`
             if (interval.end) |e| {
-                if (e.isBefore(best.getEnd())) {
+                const earliest_end = Date.earliest(best.earliest_due, best.getEnd());
+
+                if (e.isBeforeEq(earliest_end)) {
+                    // TODO: Create split function in task list as well
                     var copy = best.*;
                     best.time = e.timeSince(interval.start);
                     copy.scheduled_start = null;
-                    step = best.time;
                     copy.time = copy.time.sub(best.time);
 
                     try unscheduled.tasks.append(copy);
                 }
             }
+            const step = best.time;
+            std.debug.print("{any}\n", .{step.toReadable()});
             try scheduled.tasks.append(best.*);
             if (!best.getEnd().?.eql(best.getEnd().?.getDayStart()))
                 std.debug.assert(best.scheduled_start.?.getDay() == best.getEnd().?.getDay());

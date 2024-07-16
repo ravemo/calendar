@@ -25,8 +25,24 @@ const text_color = arc.colorFromHex(0x000000ff);
 const grid_color = arc.colorFromHex(0xeeeeeeff);
 const divider_color = arc.colorFromHex(0xaaaaaaff);
 const event_color = arc.colorFromHex(0x1f842188);
-const task_color = arc.colorFromHex(0x22accc88);
-const due_task_color = arc.colorFromHex(0x22acccff);
+const TaskColor = enum {
+    red,
+    orange,
+    yellow,
+    green,
+    blue,
+    purple,
+    gray,
+};
+const task_colors: [@typeInfo(TaskColor).Enum.fields.len]arc.Color = .{
+    arc.colorFromHex(0xac3232ff),
+    arc.colorFromHex(0xeda626ff),
+    arc.colorFromHex(0xfbf236ff),
+    arc.colorFromHex(0x6abe30ff),
+    arc.colorFromHex(0x22acccff),
+    arc.colorFromHex(0x76428aff),
+    arc.colorFromHex(0x696a6aff),
+};
 const tooltip_bg_color = arc.colorFromHex(0xd8d888aa);
 
 pub fn drawGrid(sf: Surface) void {
@@ -118,11 +134,14 @@ pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
 
     const x = wv.sf.xFromWeekday(draw_start.getWeekday()) + 3;
     const y = wv.sf.yFromHour(draw_start.getHourF());
-    if (task.due != null or task.is_due_dep) {
-        arc.setColor(renderer, due_task_color);
-    } else {
-        arc.setColor(renderer, task_color);
-    }
+    const alpha: u8 = if (task.earliest_due != null) 0xFF else 0x80;
+
+    const task_color_enum: TaskColor = if (task.parent != null and task.parent.? == 11)
+        .orange
+    else
+        .blue;
+    const task_color = task_colors[@intFromEnum(task_color_enum)];
+    arc.setColor(renderer, arc.setAlpha(task_color, alpha));
     const rect = c.SDL_FRect{
         .x = x,
         .y = y + 1,
