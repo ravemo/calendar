@@ -8,6 +8,7 @@ const EventIterator = event_lib.EventIterator;
 const task_lib = @import("task.zig");
 const Task = task_lib.Task;
 const TaskList = task_lib.TaskList;
+const cmpByDueDate = task_lib.cmpByDueDate;
 
 const print = std.debug.print;
 
@@ -199,38 +200,12 @@ const IntervalIterator = struct {
     }
 };
 
-pub fn cmpByDueDate(_: void, a: Task, b: Task) bool {
-    if (a.due) |ad| {
-        return ad.isBefore(b.due);
-    } else if (b.due) |_| {
-        return false;
-    } else if (a.depth == b.depth) {
-        if (a.gauge) |ag| {
-            return if (b.gauge) |bg| ag < bg else false;
-        } else {
-            return b.gauge != null;
-        }
-    } else return a.depth < b.depth;
-}
 pub fn cmpByStartDate(_: void, a: Task, b: Task) bool {
     if (a.start) |as| {
         return as.isBefore(b.start);
     } else if (b.start) |_| {
         return false;
     } else return false;
-}
-
-fn getBestTask(interval: Interval, tasks: *TaskList) ?*Task {
-    for (tasks.tasks.items) |*t| {
-        if (interval.start.isBefore(t.start)) continue;
-        if (t.earliest_due != null and t.earliest_due.?.isBefore(interval.start)) continue;
-        if (tasks.getFirstTask(t, interval.start)) |ret| {
-            ret.earliest_due = Date.earliest(ret.earliest_due, t.earliest_due);
-            return ret;
-        }
-    }
-
-    return null;
 }
 
 pub const Scheduler = struct {
@@ -258,40 +233,20 @@ pub const Scheduler = struct {
         self.intervals = try IntervalIterator.init(self.allocator, event_list, tasks, self.start);
     }
 
-    pub fn scheduleTasks(self: *Self, tl: TaskList) !TaskList {
+    pub fn scheduleTasks(self: *Self, tl: *TaskList) !TaskList {
         var scheduled = TaskList.initEmpty(self.allocator);
-        var unscheduled = try tl.clone();
-        defer unscheduled.deinit();
 
         var interval = self.intervals.intervals.items[0];
         const limit = self.start.after(.{ .weeks = 1 }).getWeekStart();
 
+        tl.reset();
         while (interval.start.isBefore(limit)) {
-            if (unscheduled.tasks.items.len == 0) break;
-            // TODO: Sort once and then insert sorted afterwards
-            std.mem.sort(Task, unscheduled.tasks.items, {}, cmpByDueDate);
-            const best: *Task = getBestTask(interval, &unscheduled) orelse break;
-            best.scheduled_start = interval.start;
-            // NOTE: The appends from now on will invalidate `best`
-            if (interval.end) |e| {
-                const earliest_end = Date.earliest(best.earliest_due, best.getEnd());
-
-                if (e.isBeforeEq(earliest_end)) {
-                    // TODO: Create split function in task list as well
-                    var copy = best.*;
-                    best.time = e.timeSince(interval.start);
-                    copy.scheduled_start = null;
-                    copy.time = copy.time.sub(best.time);
-
-                    try unscheduled.tasks.append(copy);
-                }
-            }
-            const step = best.time;
-            try scheduled.tasks.append(best.*);
-            if (!best.getEnd().?.eql(best.getEnd().?.getDayStart()))
-                std.debug.assert(best.scheduled_start.?.getDay() == best.getEnd().?.getDay());
-            if (!unscheduled.remove(best)) unreachable;
-            interval = try self.intervals.next(step) orelse break;
+            const pair = try tl.next(interval) orelse break;
+            try scheduled.tasks.append(pair.task);
+            interval = if (pair.interval) |new_interval|
+                new_interval
+            else
+                try self.intervals.next(pair.task.time) orelse break;
         }
 
         // Merge tasks

@@ -349,27 +349,30 @@ pub const Date = struct {
         return Time.initS(self.secondsSince(other));
     }
 
-    pub fn isBefore(self: Self, other_opt: ?Self) bool {
+    pub fn isBefore(self: ?Self, other_opt: ?Self) bool {
+        if (self == null) return false;
         if (other_opt) |other| {
-            var tm0 = self.tm;
+            var tm0 = self.?.tm;
             var tm1 = other.tm;
             const t0 = c.mktime(&tm0);
             const t1 = c.mktime(&tm1);
             return c.difftime(t0, t1) < 0;
         } else return true;
     }
-    pub fn isBeforeEq(self: Self, other_opt: ?Self) bool {
+    pub fn isBeforeEq(self: ?Self, other_opt: ?Self) bool {
+        if (self == null) return false;
         if (other_opt) |other| {
-            var tm0 = self.tm;
+            var tm0 = self.?.tm;
             var tm1 = other.tm;
             const t0 = c.mktime(&tm0);
             const t1 = c.mktime(&tm1);
             return c.difftime(t0, t1) <= 0;
         } else return true;
     }
-    pub fn eql(self: Self, other: Self) bool {
-        var tm0 = self.tm;
-        var tm1 = other.tm;
+    pub fn eql(self: ?Self, other: ?Self) bool {
+        if (other == null) return (self == null);
+        var tm0 = self.?.tm;
+        var tm1 = other.?.tm;
         const t0 = c.mktime(&tm0);
         const t1 = c.mktime(&tm1);
         return c.difftime(t0, t1) == 0;

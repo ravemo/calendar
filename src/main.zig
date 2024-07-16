@@ -94,7 +94,7 @@ pub fn main() !void {
 
     var scheduler = try Scheduler.init(alloc, events.events.items, base_tasks, Date.now());
     defer scheduler.deinit();
-    var display_tasks = try scheduler.scheduleTasks(base_tasks);
+    var display_tasks = try scheduler.scheduleTasks(&base_tasks);
     defer display_tasks.deinit();
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
@@ -264,7 +264,7 @@ pub fn main() !void {
             try base_tasks.sanitize();
             try scheduler.reset(events.events.items, base_tasks, Date.now());
             display_tasks.deinit();
-            display_tasks = try scheduler.scheduleTasks(base_tasks);
+            display_tasks = try scheduler.scheduleTasks(&base_tasks);
             cursor = Date.now();
             c.SDL_SetCursor(normal_cursor);
             update = false;

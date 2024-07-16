@@ -105,7 +105,7 @@ pub fn cmpByStartDate(_: void, a: Event, b: Event) bool {
     return a.start.isBefore(b.start);
 }
 
-pub fn appendSorted(events: *std.ArrayList(Event), to_add: Event) !void {
+pub fn insertSorted(events: *std.ArrayList(Event), to_add: Event) !void {
     for (events.items, 0..) |e, i| {
         if (cmpByStartDate({}, to_add, e)) {
             try events.insert(i, to_add);
@@ -149,7 +149,7 @@ pub const EventIterator = struct {
             var new_event = event;
             new_event.start = new_event.start.after(repeat.period.time);
             _ = self.events.orderedRemove(self.i);
-            appendSorted(&self.events, new_event) catch unreachable;
+            insertSorted(&self.events, new_event) catch unreachable;
         } else {
             self.i += 1;
         }
