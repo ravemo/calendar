@@ -94,8 +94,8 @@ pub fn main() !void {
 
     var scheduler = try Scheduler.init(alloc, events.events.items, base_tasks, Date.now());
     defer scheduler.deinit();
-    var tasks = try scheduler.scheduleTasks(base_tasks);
-    defer tasks.deinit();
+    var display_tasks = try scheduler.scheduleTasks(base_tasks);
+    defer display_tasks.deinit();
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
     var days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
@@ -263,8 +263,8 @@ pub fn main() !void {
             base_tasks = try TaskList.init(alloc, tasks_db);
             try base_tasks.sanitize();
             try scheduler.reset(events.events.items, base_tasks, Date.now());
-            tasks.deinit();
-            tasks = try scheduler.scheduleTasks(base_tasks);
+            display_tasks.deinit();
+            display_tasks = try scheduler.scheduleTasks(base_tasks);
             cursor = Date.now();
             c.SDL_SetCursor(normal_cursor);
             update = false;
@@ -274,7 +274,7 @@ pub fn main() !void {
 
         var events_it = try EventIterator.init(alloc, events.events.items, weekview.start);
         defer events_it.deinit();
-        try draw.drawWeek(&weekview, &events_it, tasks.tasks.items, Date.now(), cursor);
+        try draw.drawWeek(&weekview, &events_it, display_tasks.tasks.items, Date.now(), cursor);
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);
 

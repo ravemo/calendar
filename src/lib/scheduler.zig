@@ -264,8 +264,11 @@ pub const Scheduler = struct {
         defer unscheduled.deinit();
 
         var interval = self.intervals.intervals.items[0];
+        const limit = self.start.after(.{ .weeks = 1 }).getWeekStart();
 
-        while (unscheduled.tasks.items.len > 0) {
+        while (interval.start.isBefore(limit)) {
+            if (unscheduled.tasks.items.len == 0) break;
+            // TODO: Sort once and then insert sorted afterwards
             std.mem.sort(Task, unscheduled.tasks.items, {}, cmpByDueDate);
             const best: *Task = getBestTask(interval, &unscheduled) orelse break;
             best.scheduled_start = interval.start;
@@ -284,15 +287,14 @@ pub const Scheduler = struct {
                 }
             }
             const step = best.time;
-            std.debug.print("{any}\n", .{step.toReadable()});
             try scheduled.tasks.append(best.*);
             if (!best.getEnd().?.eql(best.getEnd().?.getDayStart()))
                 std.debug.assert(best.scheduled_start.?.getDay() == best.getEnd().?.getDay());
             if (!unscheduled.remove(best)) unreachable;
-            interval = try self.intervals.next(step) orelse return scheduled;
+            interval = try self.intervals.next(step) orelse break;
         }
 
-        // Merge intervals
+        // Merge tasks
         var i: usize = 0;
         while (i < scheduled.tasks.items.len - 1) { // Yes, we ignore the last element
             const cur = &scheduled.tasks.items[i];
