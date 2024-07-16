@@ -5,6 +5,7 @@ const c = @cImport({
 });
 const regex = @import("regex.zig");
 const Regex = regex.Regex;
+const Captures = regex.Captures;
 
 const print = std.debug.print;
 
@@ -36,16 +37,25 @@ pub const Time = struct {
     }
 
     pub fn fromString(str: [:0]const u8) StringError!Self {
-        const pattern = "(?:(?'weeks'\\d+) weeks?(?:, )?)?" ++
-            "(?:(?'days'\\d+) d(?:ay)?s?(?:, )?)?" ++
-            "(?:(?'hours'\\d+) h(?:our)?s?(?:, )?)?" ++
-            "(?:(?'minutes'\\d+) m(?:inute)?s?(?:, )?)?" ++
-            "(?:(?'seconds'\\d+) s(?:econd)?s?)?";
+        const patterns: [5][:0]const u8 = .{
+            "(?'weeks'\\d+)? ?week",
+            "(?'days'\\d+)? ?d(?:ay)?",
+            "(?'hours'\\d+)? ?h(?:our)?",
+            "(?'minutes'\\d+)? ?m(?:inute)?",
+            "(((?'seconds'\\d+) ?)|(^))s(?:econd)?",
+        };
 
-        const re = try Regex.compile(pattern);
-        defer re.deinit();
-
-        var cap = try re.captures(str);
+        var regexes: [5]Regex = undefined;
+        var caps: [5]?Captures = undefined;
+        for (&regexes, &caps, patterns) |*re, *cap, pattern| {
+            re.* = try Regex.compile(pattern);
+            cap.* = re.captures(str) catch |e| switch (e) {
+                StringError.NoMatches => null,
+                else => return e,
+            };
+        }
+        defer for (&regexes) |*re|
+            re.deinit();
 
         const TimePart = enum {
             Weeks,
@@ -54,22 +64,26 @@ pub const Time = struct {
             Minutes,
             Seconds,
         };
-        const parts = [_]struct { str: [:0]const u8, val: TimePart }{
-            .{ .str = "weeks", .val = .Weeks },
-            .{ .str = "days", .val = .Days },
-            .{ .str = "hours", .val = .Hours },
-            .{ .str = "minutes", .val = .Minutes },
-            .{ .str = "seconds", .val = .Seconds },
+        const parts = [_]struct { name: [:0]const u8, val: TimePart }{
+            .{ .name = "weeks", .val = .Weeks },
+            .{ .name = "days", .val = .Days },
+            .{ .name = "hours", .val = .Hours },
+            .{ .name = "minutes", .val = .Minutes },
+            .{ .name = "seconds", .val = .Seconds },
         };
         var time = Time{};
-        for (parts) |part| {
-            const name = part.str;
+        for (parts, &caps) |part, *cap_opt| {
+            if (cap_opt.* == null) continue;
+            var cap = cap_opt.*.?;
             const v = part.val;
-            const substring = try cap.getNamedMatch(name);
+            const substring = cap.getNamedMatch(part.name);
             defer cap.deinitMatch(substring);
-            const int_val = if (substring) |substr| std.fmt.parseInt(i32, substr, 10) catch {
-                return StringError.ConversionError;
-            } else 0;
+            const int_val = if (substring) |substr|
+                std.fmt.parseInt(i32, substr, 10) catch {
+                    return StringError.ConversionError;
+                }
+            else
+                1;
             switch (v) {
                 .Weeks => time.weeks = int_val,
                 .Days => time.days = int_val,
@@ -261,7 +275,7 @@ pub const Date = struct {
         for (parts) |part| {
             const name = part.str;
             const v = part.val;
-            const substring = try cap.getNamedMatch(name);
+            const substring = cap.getNamedMatch(name);
             if (substring) |substr| {
                 switch (v) {
                     .Year => date.setYear(std.fmt.parseInt(i32, substr, 10) catch return StringError.ConversionError),
@@ -535,7 +549,7 @@ pub const RepeatInfo = struct {
         for (parts) |part| {
             const name = part.str;
             const v = part.val;
-            const substring = try cap.getNamedMatch(name);
+            const substring = cap.getNamedMatch(name);
             defer cap.deinitMatch(substring);
             switch (v) {
                 .Period => info.period = try Period.fromString(substring.?),
@@ -555,3 +569,13 @@ pub const RepeatInfo = struct {
         });
     }
 };
+
+test "string to RepeatInfo" {
+    var repeat_info: RepeatInfo = undefined;
+    repeat_info = try RepeatInfo.fromString("every 1 week");
+    try std.testing.expectEqual(7 * 24 * 60 * 60, repeat_info.period.time.getSeconds());
+    repeat_info = try RepeatInfo.fromString("every 2 weeks");
+    try std.testing.expectEqual(2 * 7 * 24 * 60 * 60, repeat_info.period.time.getSeconds());
+    repeat_info = try RepeatInfo.fromString("every week");
+    try std.testing.expectEqual(7 * 24 * 60 * 60, repeat_info.period.time.getSeconds());
+}

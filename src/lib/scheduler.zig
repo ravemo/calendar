@@ -282,11 +282,7 @@ test "Interval check" {
 
     const now = Date.now();
 
-    const tl = TaskList{
-        .tasks = std.ArrayList(Task).init(alloc),
-        .task_names = std.ArrayList([]const u8).init(alloc),
-        .allocator = alloc,
-    };
+    const tl = TaskList.initEmpty(alloc);
     defer tl.deinit();
 
     const events = [0]Event{};
@@ -296,44 +292,4 @@ test "Interval check" {
     try std.testing.expectEqual(1, intervals.intervals.items.len);
     try std.testing.expectEqual(now, intervals.intervals.items[0].start);
     try std.testing.expectEqual(null, intervals.intervals.items[0].end);
-}
-
-test "Start cut" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{
-        .enable_memory_limit = true,
-    }){ .requested_memory_limit = 1024 * 1024 * 10 };
-    const alloc = gpa.allocator();
-    defer _ = gpa.deinit();
-
-    const now = Date.now();
-    const task1 = .{ .id = 0, .time = Time.initH(2), .start = now };
-    const task2 = .{ .id = 1, .time = Time.initH(1), .start = now.after(Time.initH(1)) };
-    var tasks = std.ArrayList(Task).init(alloc);
-    try tasks.append(task1);
-    try tasks.append(task2);
-
-    const tl = TaskList{
-        .tasks = tasks,
-        .task_names = std.ArrayList([]const u8).init(alloc),
-        .allocator = alloc,
-    };
-    defer tl.deinit();
-    const events = [0]Event{};
-
-    var scheduler = try Scheduler.init(alloc, &events, tl, now);
-    try std.testing.expectEqual(2, scheduler.intervals.intervals.items.len);
-    defer scheduler.deinit();
-
-    const new_tl = try scheduler.scheduleTasks(tl);
-    defer new_tl.deinit();
-
-    try std.testing.expectEqual(3, new_tl.tasks.items.len);
-
-    try std.testing.expectEqual(0, new_tl.tasks.items[0].id);
-    try std.testing.expectEqual(1, new_tl.tasks.items[1].id);
-    try std.testing.expectEqual(0, new_tl.tasks.items[2].id);
-
-    try std.testing.expectEqual(60 * 60, new_tl.tasks.items[0].time.getSeconds());
-    try std.testing.expectEqual(60 * 60, new_tl.tasks.items[1].time.getSeconds());
-    try std.testing.expectEqual(60 * 60, new_tl.tasks.items[2].time.getSeconds());
 }

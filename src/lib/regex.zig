@@ -22,7 +22,7 @@ pub const Captures = struct {
         );
         return std.mem.span(substring);
     }
-    pub fn getNamedMatch(self: *Self, name: [:0]const u8) !?[:0]const u8 {
+    pub fn getNamedMatch(self: *Self, name: [:0]const u8) ?[:0]const u8 {
         var substring: [*c]const u8 = null;
         _ = c.pcre_get_named_substring(
             self.re.re,
