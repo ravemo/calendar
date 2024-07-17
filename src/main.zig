@@ -160,7 +160,11 @@ pub fn main() !void {
                         tooltip = null;
                     }
                     if (keystates[c.SDL_SCANCODE_LCTRL] != 0x00) {
-                        cursor.setHourF(weekview.sf.hourFromY(@as(f32, @floatFromInt(ev.button.y)) - weekview.sf.y));
+                        const x = @as(f32, @floatFromInt(ev.button.x)) - weekview.sf.w / 7 / 2 - weekview.sf.x;
+                        const y = @as(f32, @floatFromInt(ev.button.y)) - weekview.sf.y;
+                        cursor.setHourF(weekview.sf.hourFromY(y));
+                        cursor.setWeekday(@enumFromInt(weekview.sf.weekdayFromX(x)));
+                        cursor.update();
                     } else if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
                         for (events.events.items) |*e| {
                             if (e.id != er.id) continue;
@@ -213,7 +217,7 @@ pub fn main() !void {
                             tooltip_text = if (t.parent) |parent|
                                 try std.fmt.allocPrint(alloc, "Parent ({}): {s}\n{}: {s}\n", .{ parent, base_tasks.getById(parent).?.name, t.id, t.name })
                             else
-                                try std.fmt.allocPrint(alloc, "{s}\n", .{t.name});
+                                try std.fmt.allocPrint(alloc, "{}: {s}\n", .{ t.id, t.name });
                             tooltip = .{
                                 .text = tooltip_text,
                                 .x = ev.motion.x,
