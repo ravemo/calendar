@@ -2,6 +2,7 @@ const std = @import("std");
 const datetime = @import("datetime.zig");
 const Time = datetime.Time;
 const Date = datetime.Date;
+const RepeatInfo = datetime.RepeatInfo;
 const event_lib = @import("event.zig");
 const Event = event_lib.Event;
 const Database = @import("database.zig").Database;
@@ -29,13 +30,13 @@ pub const Task = struct {
     time: Time,
     start: ?Date = null,
     due: ?Date = null,
-    // TODO: repeat info
+    repeat: ?Time = null,
     scheduled_start: ?Date = null,
     // TODO: Tasks should be able to be split, so we need scheduled_time
     deps: [32]?i32 = .{null} ** 32,
-    earliest_due: ?Date,
-    depth: i32,
-    gauge: ?i32,
+    earliest_due: ?Date = null,
+    depth: i32 = -1,
+    gauge: ?i32 = null,
 
     pub fn getEnd(self: Self) ?Date {
         return if (self.scheduled_start) |s| s.after(self.time) else self.due;
@@ -63,6 +64,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
     var time: ?Time = null;
     var start: ?Date = null;
     var due: ?Date = null;
+    var repeat: ?RepeatInfo = null;
     var gauge: ?i32 = null;
     var deps = [_]?i32{null} ** 32;
 
@@ -82,6 +84,9 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
         } else if (std.mem.eql(u8, col, "due")) {
             if (val) |v|
                 due = Date.fromString(v) catch return -1;
+        } else if (std.mem.eql(u8, col, "repeat")) {
+            if (val) |v|
+                repeat = RepeatInfo.fromString(v) catch return -1;
         } else if (std.mem.eql(u8, col, "time")) {
             if (val) |v| {
                 time = .{ .seconds = std.fmt.parseInt(i32, v, 10) catch return -1 };
@@ -111,8 +116,6 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
             if (val) |v| {
                 gauge = @as(i32, @intFromFloat(std.fmt.parseFloat(f32, v) catch return -1));
             }
-        } else {
-            if (false) std.debug.print("Unhandled column: {s}\n", .{col});
         }
     }
 
@@ -133,6 +136,7 @@ fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c
         .time = time.?,
         .start = start,
         .due = due,
+        .repeat = if (repeat) |r| r.period.time else null,
         .earliest_due = due,
         .scheduled_start = null,
         .deps = deps,
@@ -283,15 +287,8 @@ pub const TaskList = struct {
     }
 
     pub fn next(self: *Self, interval: Interval) !?struct { task: Task, interval: ?Interval } {
-        var best = self.getBestTask(interval) orelse return null;
+        var best = try self.getBestTask(interval) orelse return null;
         best.scheduled_start = interval.start;
-        if (best.time.getSeconds() == 0) {
-            // We reached a task with zero seconds, so we just mark it as done
-            // and try again
-            try self.pushPartial(best, true);
-            return self.next(interval);
-        }
-        std.debug.assert(best.time.getSeconds() > 0);
 
         var did_cut = false;
         const earliest_limit = Date.earliest(best.earliest_due, interval.end);
@@ -306,7 +303,7 @@ pub const TaskList = struct {
         std.debug.assert(best.getEnd().?.isBeforeEq(interval.end));
 
         const completed = !did_cut or best.getEnd().?.eql(interval.end);
-        try self.pushPartial(best, completed);
+        try self.pushPartial(best, if (completed) best.getEnd().? else null);
         const ret_interval = Interval{ .start = best.getEnd().?, .end = interval.end };
 
         if (!completed) {
@@ -316,33 +313,55 @@ pub const TaskList = struct {
         }
     }
 
-    fn pushPartial(self: *TaskList, task: Task, completed: bool) !void {
+    fn pushPartial(self: *TaskList, task: Task, last_completed: ?Date) !void {
         for (self.done.items) |*done| {
             if (task.id != done.id) continue;
-            if (completed) {
-                done.last_completed = task.getEnd().?;
+            if (last_completed) |completed| {
+                done.last_completed = completed;
+                if (task.repeat != null)
+                    done.time = .{ .seconds = 0 };
             } else {
                 done.time = done.time.add(task.time);
             }
-            break;
+            return;
+        }
+
+        // If nothing was found
+        if (task.repeat != null and last_completed != null) {
+            try self.done.append(.{ .id = task.id, .time = .{ .seconds = 0 }, .last_completed = last_completed });
         } else {
-            const last_completed = if (completed) task.getEnd().? else null;
             try self.done.append(.{ .id = task.id, .time = task.time, .last_completed = last_completed });
         }
     }
 
-    fn getPartial(self: TaskList, task: Task) ?Task {
+    fn getPartial(self: TaskList, task: Task, start: Date) ?Task {
         const partial = for (self.done.items) |j| {
             if (task.id == j.id) break j;
         } else null;
 
         if (partial) |p| {
-            if (p.last_completed != null) return null;
             var new_t = task;
-            std.debug.assert(new_t.time.getSeconds() > 0);
-            new_t.time = new_t.time.sub(p.time);
-            if (new_t.time.getSeconds() <= 0)
-                return null;
+            if (p.last_completed) |last_completed| {
+                if (task.repeat) |repeat| {
+                    // If repeats, add the repeat period until the task start is
+                    // after the current interval start
+
+                    while (Date.isBefore(new_t.due.?, start)) {
+                        new_t.scheduled_start = null;
+                        new_t.start = new_t.start.?.after(repeat);
+                        new_t.due = new_t.due.?.after(repeat);
+                        new_t.earliest_due = new_t.earliest_due.?.after(repeat);
+                    }
+                    // If the most recent, not-done repeated task starts after
+                    // the last time it was completed, then we are too early
+                    // to return it.
+                    if (Date.isBefore(new_t.start, last_completed)) return null;
+                } else return null;
+            }
+            if (new_t.time.getSeconds() > 0) {
+                new_t.time = new_t.time.sub(p.time);
+                if (new_t.time.getSeconds() <= 0) return null;
+            }
             return new_t;
         } else {
             return task;
@@ -354,11 +373,20 @@ pub const TaskList = struct {
         // completed as well.
         // Starts by dependencies first, and then by children
 
+        // But before that, we check if we are a repeating task that just ended
+        if (task.repeat) |_| {
+            if (task.earliest_due) |ed| {
+                if (ed.eql(at_time)) {
+                    return task;
+                }
+            }
+        }
+
         for (task.deps) |d| {
             if (d == null) continue;
             if (self.getById(d.?)) |t_original| {
-                const t = self.getPartial(t_original.*) orelse continue;
-                if (t.start != null and at_time.isBeforeEq(t.start.?)) return null;
+                const t = self.getPartial(t_original.*, at_time) orelse continue;
+                if (t.start != null and at_time.isBefore(t.start.?)) return null;
                 return self.getFirstTask(t, at_time);
             }
         }
@@ -366,8 +394,8 @@ pub const TaskList = struct {
         var has_pending_children = false;
         for (self.tasks.items) |t_original| {
             if (t_original.parent != task.id) continue;
-            const t = self.getPartial(t_original) orelse continue;
-            if (t.start != null and at_time.isBeforeEq(t.start.?)) {
+            const t = self.getPartial(t_original, at_time) orelse continue;
+            if (t.start != null and at_time.isBefore(t.start.?)) {
                 has_pending_children = true;
                 continue;
             }
@@ -376,21 +404,30 @@ pub const TaskList = struct {
         if (has_pending_children) {
             return null;
         } else {
-            return self.getPartial(task);
+            return self.getPartial(task, at_time);
         }
     }
 
-    fn getBestTask(self: *TaskList, interval: Interval) ?Task {
+    fn getBestTask(self: *TaskList, interval: Interval) !?Task {
         for (self.tasks.items) |original_t| {
-            const t = self.getPartial(original_t) orelse continue;
+            const t = self.getPartial(original_t, interval.start) orelse continue;
 
             if (interval.start.isBefore(t.start)) continue;
-            if (Date.isBeforeEq(t.earliest_due, interval.start)) continue;
+            if (Date.isBefore(t.earliest_due, interval.start)) continue;
+            if (Date.eql(t.earliest_due, interval.start) and
+                original_t.time.getSeconds() != 0) continue;
             const first_task_opt = self.getFirstTask(t, interval.start);
             if (first_task_opt) |ret| {
                 var cloned = ret;
                 // TODO: Set this when loading the tasks, not on iteration
                 cloned.earliest_due = Date.earliest(cloned.earliest_due, t.earliest_due);
+                if (cloned.time.getSeconds() == 0) {
+                    // We reached a task with zero seconds, so we just mark it as done
+                    // and try again
+                    try self.pushPartial(cloned, interval.start);
+                    return self.getBestTask(interval);
+                }
+                std.debug.assert(cloned.time.getSeconds() > 0);
                 return cloned;
             }
         }

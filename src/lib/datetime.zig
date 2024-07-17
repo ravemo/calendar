@@ -385,6 +385,7 @@ pub const Date = struct {
     }
     pub fn eql(self: ?Self, other: ?Self) bool {
         if (other == null) return (self == null);
+        if (self == null) return false;
         var tm0 = self.?.tm;
         var tm1 = other.?.tm;
         const t0 = c.mktime(&tm0);

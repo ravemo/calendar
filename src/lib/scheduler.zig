@@ -12,6 +12,11 @@ const cmpByDueDate = task_lib.cmpByDueDate;
 
 const print = std.debug.print;
 
+pub fn trace(msg: []const u8, a: anytype) @TypeOf(a) {
+    std.debug.print("{s}\n", .{msg});
+    return a;
+}
+
 pub const Interval = struct {
     // A Interval is a semi-open interval from [start, end)
     const Self = @This();
@@ -78,6 +83,8 @@ const IntervalIterator = struct {
     intervals: std.ArrayList(Interval),
 
     fn init(allocator: std.mem.Allocator, event_list: []Event, tasks: TaskList, start: Date) !Self {
+        // TODO: Do most of this function in a lazy manner, i.e. when iterating over intervals
+        const limit = start.after(.{ .weeks = 4 });
         var events = try EventIterator.init(allocator, event_list, start);
         defer events.deinit();
         var self = Self{
@@ -85,15 +92,51 @@ const IntervalIterator = struct {
         };
         try self.intervals.append(.{ .start = start, .end = null });
 
+        var split_count: usize = 0;
+        for (tasks.tasks.items) |t| {
+            if (t.repeat) |repeat| {
+                var s = t.start.?;
+                while (s.isBefore(limit)) {
+                    split_count += 1;
+                    s = s.after(repeat);
+                }
+                if (t.due != null) {
+                    var d = t.due.?;
+                    while (d.isBefore(limit)) {
+                        split_count += 1;
+                        d = d.after(repeat);
+                    }
+                }
+            } else {
+                if (t.start) |_| split_count += 1;
+                if (t.due) |_| split_count += 1;
+            }
+        }
+        try self.intervals.ensureTotalCapacity(self.intervals.items.len + split_count);
+
         // Split intervals at tasks starts
         const sorted_tasks = try tasks.tasks.clone();
         defer sorted_tasks.deinit();
         std.mem.sort(Task, sorted_tasks.items, {}, cmpByStartDate);
-        for (sorted_tasks.items) |t|
-            if (t.start) |s| try self.split(s);
-
-        for (tasks.tasks.items) |t|
-            if (t.due) |d| try self.split(d);
+        for (sorted_tasks.items) |t| {
+            if (t.repeat) |repeat| {
+                var s = t.start.?;
+                while (s.isBefore(limit)) {
+                    self.split(s);
+                    s = s.after(repeat);
+                }
+                if (t.due != null) {
+                    var d = t.due.?;
+                    while (d.isBefore(limit)) {
+                        self.split(d);
+                        d = d.after(repeat);
+                    }
+                }
+            } else {
+                if (t.start) |s| self.split(s);
+                if (t.due) |d| self.split(d);
+            }
+        }
 
         // Test for holes
         {
@@ -107,8 +150,6 @@ const IntervalIterator = struct {
         }
 
         // Remove event intervals from interval list
-        // TODO: Do this in a lazy manner, i.e. when iterating over intervals
-        const limit = start.after(.{ .weeks = 4 });
         while (events.next(limit)) |e| {
             if (limit.isBefore(getInterval(e).start)) break;
             try self.remove(getInterval(e), limit);
@@ -174,7 +215,7 @@ const IntervalIterator = struct {
         }
     }
 
-    fn split(self: *Self, s: Date) !void {
+    fn split(self: *Self, s: Date) void {
         for (self.intervals.items, 0..) |*interval, i| {
             if (s.isBeforeEq(interval.start)) continue;
             if (interval.end) |e| {
@@ -182,7 +223,7 @@ const IntervalIterator = struct {
             }
             const last_end = interval.end;
             interval.end = s;
-            try self.intervals.insert(i + 1, .{ .start = s, .end = last_end });
+            self.intervals.insertAssumeCapacity(i + 1, .{ .start = s, .end = last_end });
             return;
         }
     }
@@ -268,7 +309,6 @@ pub const Scheduler = struct {
         }
 
         try scheduled.checkOverlap();
-
         return scheduled;
     }
 };
