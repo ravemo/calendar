@@ -302,13 +302,16 @@ pub const TaskList = struct {
             std.debug.assert(best.scheduled_start.?.getDay() == best.getEnd().?.getDay());
         std.debug.assert(best.getEnd().?.isBeforeEq(interval.end));
 
-        const completed = !did_cut or best.getEnd().?.eql(interval.end);
-        try self.pushPartial(best, if (completed) best.getEnd().? else null);
         const ret_interval = Interval{ .start = best.getEnd().?, .end = interval.end };
-
-        if (!completed) {
-            return .{ .task = best, .interval = ret_interval };
+        const completed = best.getEnd().?.eql(interval.end);
+        if (did_cut) {
+            if (!completed) {
+                return .{ .task = best, .interval = ret_interval };
+            } else {
+                return .{ .task = best, .interval = null };
+            }
         } else {
+            try self.pushPartial(best, if (completed) best.getEnd().? else null);
             return .{ .task = best, .interval = null };
         }
     }
