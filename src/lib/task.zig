@@ -53,6 +53,20 @@ pub const Task = struct {
             std.debug.print("No scheduled start; time = {any}\n", .{self.time});
         }
     }
+
+    pub fn getFirstAfter(self: Self, date: Date) Self {
+        var new_t = self;
+        if (new_t.repeat) |repeat| {
+            // TODO: Do some math so you can just multiple the repeat by the correct number
+            // so you don't have to do this loop
+            while (Date.isBefore(new_t.due.?, date)) {
+                new_t.start = new_t.start.?.after(repeat);
+                new_t.due = new_t.due.?.after(repeat);
+                new_t.earliest_due = new_t.earliest_due.?.after(repeat);
+            }
+        }
+        return new_t;
+    }
 };
 
 fn load_task_cb(tasks_ptr: ?*anyopaque, argc: c_int, argv: [*c][*c]u8, cols: [*c][*c]u8) callconv(.C) c_int {
@@ -343,22 +357,14 @@ pub const TaskList = struct {
         } else null;
 
         if (partial) |p| {
-            var new_t = task;
+            var new_t = task.getFirstAfter(start);
             if (p.last_completed) |last_completed| {
-                if (task.repeat) |repeat| {
-                    // If repeats, add the repeat period until the task start is
-                    // after the current interval start
-
-                    new_t.scheduled_start = last_completed;
-                    while (Date.isBefore(new_t.due.?, start)) {
-                        new_t.start = new_t.start.?.after(repeat);
-                        new_t.due = new_t.due.?.after(repeat);
-                        new_t.earliest_due = new_t.earliest_due.?.after(repeat);
-                    }
+                if (task.repeat) |_| {
                     // If the most recent, not-done repeated task starts after
                     // the last time it was completed, then we are too early
                     // to return it.
                     if (Date.isBefore(new_t.start, last_completed)) return null;
+                    new_t.scheduled_start = last_completed;
                 } else return null;
             }
             if (new_t.time.getSeconds() > 0) {
@@ -367,7 +373,7 @@ pub const TaskList = struct {
             }
             return new_t;
         } else {
-            return task;
+            return task.getFirstAfter(start);
         }
     }
 
