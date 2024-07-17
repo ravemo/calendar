@@ -427,7 +427,7 @@ pub const TaskList = struct {
             for (self.tasks.items) |original_t| {
                 const t = self.getPartial(original_t, interval.start) orelse continue;
 
-                if (interval.start.isBefore(t.start)) continue;
+                if (t.start != null and interval.start.isBefore(t.start)) continue;
                 if (Date.isBefore(t.earliest_due, interval.start)) continue;
                 if (Date.eql(t.earliest_due, interval.start) and
                     original_t.time.getSeconds() != 0) continue;
