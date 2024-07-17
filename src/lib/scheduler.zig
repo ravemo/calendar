@@ -216,15 +216,33 @@ const IntervalIterator = struct {
     }
 
     fn split(self: *Self, s: Date) void {
-        for (self.intervals.items, 0..) |*interval, i| {
-            if (s.isBeforeEq(interval.start)) continue;
-            if (interval.end) |e| {
-                if (e.isBeforeEq(s)) continue;
-            }
-            const last_end = interval.end;
+        if (Date.isBefore(s, self.intervals.items[0].start)) return;
+        if (Date.isBefore(self.intervals.getLast().end, s)) {
+            const interval = &self.intervals.items[self.intervals.items.len];
+            self.intervals.appendAssumeCapacity(.{ .start = s, .end = interval.end });
             interval.end = s;
-            self.intervals.insertAssumeCapacity(i + 1, .{ .start = s, .end = last_end });
             return;
+        }
+        var min_i: usize = 0;
+        var max_i: usize = self.intervals.items.len - 1;
+        var i: usize = @divFloor(min_i + max_i, 2);
+        while (true) {
+            const interval = &self.intervals.items[i];
+            if (Date.eql(s, interval.start) or Date.eql(s, interval.end))
+                return;
+
+            if (Date.isBeforeEq(interval.end, s)) {
+                std.debug.assert(min_i != max_i);
+                min_i = i + 1;
+            } else if (Date.isBeforeEq(s, interval.start)) {
+                std.debug.assert(min_i != max_i);
+                max_i = i;
+            } else {
+                self.intervals.insertAssumeCapacity(i + 1, .{ .start = s, .end = interval.end });
+                interval.end = s;
+                return;
+            }
+            i = @divFloor(min_i + max_i, 2);
         }
     }
 
