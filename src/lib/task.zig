@@ -346,8 +346,8 @@ pub const TaskList = struct {
                     // If repeats, add the repeat period until the task start is
                     // after the current interval start
 
+                    new_t.scheduled_start = last_completed;
                     while (Date.isBefore(new_t.due.?, start)) {
-                        new_t.scheduled_start = null;
                         new_t.start = new_t.start.?.after(repeat);
                         new_t.due = new_t.due.?.after(repeat);
                         new_t.earliest_due = new_t.earliest_due.?.after(repeat);
@@ -409,26 +409,36 @@ pub const TaskList = struct {
     }
 
     fn getBestTask(self: *TaskList, interval: Interval) !?Task {
-        for (self.tasks.items) |original_t| {
-            const t = self.getPartial(original_t, interval.start) orelse continue;
+        var it_count: usize = 0;
+        while (true) {
+            it_count += 1;
+            if (it_count > 10) {
+                @panic("Something is wrong, too many iterations");
+            }
+            for (self.tasks.items) |original_t| {
+                const t = self.getPartial(original_t, interval.start) orelse continue;
 
-            if (interval.start.isBefore(t.start)) continue;
-            if (Date.isBefore(t.earliest_due, interval.start)) continue;
-            if (Date.eql(t.earliest_due, interval.start) and
-                original_t.time.getSeconds() != 0) continue;
-            const first_task_opt = self.getFirstTask(t, interval.start);
-            if (first_task_opt) |ret| {
-                var cloned = ret;
-                // TODO: Set this when loading the tasks, not on iteration
-                cloned.earliest_due = Date.earliest(cloned.earliest_due, t.earliest_due);
-                if (cloned.time.getSeconds() == 0) {
-                    // We reached a task with zero seconds, so we just mark it as done
-                    // and try again
-                    try self.pushPartial(cloned, interval.start);
-                    return self.getBestTask(interval);
+                if (interval.start.isBefore(t.start)) continue;
+                if (Date.isBefore(t.earliest_due, interval.start)) continue;
+                if (Date.eql(t.earliest_due, interval.start) and
+                    original_t.time.getSeconds() != 0) continue;
+                const first_task_opt = self.getFirstTask(t, interval.start);
+                if (first_task_opt) |ret| {
+                    var cloned = ret;
+                    // TODO: Set this when loading the tasks, not on iteration
+                    cloned.earliest_due = Date.earliest(cloned.earliest_due, t.earliest_due);
+                    if (cloned.time.getSeconds() == 0) {
+                        // We reached a task with zero seconds, so we just mark it as done
+                        // and try again
+                        const done_time = interval.end; // TODO: Improve this
+                        try self.pushPartial(cloned, done_time);
+                        break;
+                    }
+                    std.debug.assert(cloned.time.getSeconds() > 0);
+                    return cloned;
                 }
-                std.debug.assert(cloned.time.getSeconds() > 0);
-                return cloned;
+            } else {
+                break;
             }
         }
 

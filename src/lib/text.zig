@@ -15,12 +15,20 @@ const VAlignment = enum {
     Bottom,
 };
 
-pub fn drawText(renderer: anytype, label: []const u8, x: f32, y: f32, max_w: f32, h_align: HAlignment, v_align: VAlignment) void {
+pub fn drawText(renderer: anytype, label: []const u8, x: f32, y: f32, max_w: f32, max_h: f32, h_align: HAlignment, v_align: VAlignment) void {
     const allocator = std.heap.page_allocator;
     const new_label = allocator.dupeZ(u8, label) catch "ERROR";
-    drawTextZ(renderer, new_label, x, y, max_w, h_align, v_align);
+    drawTextZ(renderer, new_label, x, y, max_w, max_h, h_align, v_align);
 }
-pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, max_w: f32, h_align: HAlignment, v_align: VAlignment) void {
+pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, max_w: f32, max_h: f32, h_align: HAlignment, v_align: VAlignment) void {
+    if (max_w > 0 and max_h > 0) {
+        _ = c.SDL_RenderSetClipRect(renderer, &c.SDL_Rect{
+            .x = @intFromFloat(x),
+            .y = @intFromFloat(y),
+            .w = @intFromFloat(max_w),
+            .h = @intFromFloat(max_h),
+        });
+    }
     const size = 14;
 
     const font = c.TTF_OpenFont("data/Mecha.ttf", size);
@@ -58,4 +66,5 @@ pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, max_w: 
     const text_location: c.SDL_Rect = .{ .x = draw_x, .y = draw_y, .w = w, .h = h };
 
     _ = c.SDL_RenderCopy(@ptrCast(renderer), text_texture, null, &text_location);
+    _ = c.SDL_RenderSetClipRect(renderer, null);
 }

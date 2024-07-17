@@ -102,7 +102,7 @@ pub fn drawEvent(wv: *WeekView, event: Event) !void {
     try wv.eventRects.append(.{ .id = draw_event.id, .rect = rect });
 
     arc.setColor(renderer, text_color);
-    text.drawText(renderer, draw_event.name, x + 2, y + 2, rect.w - 4, .Left, .Top);
+    text.drawText(renderer, draw_event.name, x + 2, y + 2, rect.w - 4, rect.h - 4, .Left, .Top);
 }
 
 pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
@@ -153,7 +153,7 @@ pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
 
     arc.setColor(renderer, text_color);
     if (rect.h > 20)
-        text.drawText(renderer, draw_task.name, x + 2, y + 2, rect.w - 4, .Left, .Top);
+        text.drawText(renderer, draw_task.name, x + 2, y + 2, rect.w - 4, rect.h - 4, .Left, .Top);
 }
 pub fn drawTask(wv: *WeekView, task: Task, now: Date) !void {
     _ = now; // TODO: Draw tasks greyed-out if they are already past
@@ -212,7 +212,7 @@ pub fn drawHours(sf: Surface, now: Date) void {
         const y: f32 = sep * @as(f32, @floatFromInt(i)) + sf.sy;
         var buf: [6:0]u8 = undefined;
         buf = std.mem.bytesToValue([6:0]u8, std.fmt.bufPrintZ(&buf, "{}:00", .{i}) catch "error");
-        text.drawText(renderer, &buf, sf.w - 10, y + sep / 2, -1, .Right, .Center);
+        text.drawText(renderer, &buf, sf.w - 10, y + sep / 2, -1, -1, .Right, .Center);
     }
 
     arc.setColor(renderer, divider_color);
@@ -236,8 +236,8 @@ pub fn drawDays(sf: Surface, now: Date) void {
         const x: f32 = sf.w * @as(f32, @floatFromInt(i)) / 7;
         var buf: [2:0]u8 = [_:0]u8{ 0, 0 };
         _ = std.fmt.formatIntBuf(&buf, cur_day.getDay(), 10, .lower, .{});
-        text.drawText(renderer, weekday, x + sf.w / 14, sf.h / 3, -1, .Center, .Center);
-        text.drawText(renderer, &buf, x + sf.w / 14, 2 * sf.h / 3, -1, .Center, .Center);
+        text.drawText(renderer, weekday, x + sf.w / 14, sf.h / 3, -1, -1, .Center, .Center);
+        text.drawText(renderer, &buf, x + sf.w / 14, 2 * sf.h / 3, -1, -1, .Center, .Center);
     }
     arc.setColor(renderer, divider_color);
     for (0..7) |i| {
@@ -271,7 +271,8 @@ pub const Tooltip = struct {
             self.text,
             @as(f32, @floatFromInt(self.x)) + 5,
             @as(f32, @floatFromInt(self.y)) - 100 + 5,
-            200,
+            @as(f32, @floatFromInt(rect.w)) - 10,
+            @as(f32, @floatFromInt(rect.h)) - 10,
             .Left,
             .Top,
         );
