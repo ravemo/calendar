@@ -11,7 +11,7 @@ const StringError = datetime.StringError;
 const RepeatInfo = datetime.RepeatInfo;
 const Date = datetime.Date;
 
-const AddCmd = struct {
+pub const AddCmd = struct {
     const Self = @This();
     const pattern = "add (.*)";
     name: []const u8,
@@ -34,14 +34,17 @@ const AddCmd = struct {
         const start_date = try Date.fromString(start_input);
         const end_date = try Date.fromString(end_input);
 
+        try Self.createEvent(db, allocator, self.name, start_date, end_date);
+    }
+
+    pub fn createEvent(db: *Database, allocator: std.mem.Allocator, name: []const u8, start_date: Date, end_date: Date) !void {
         const start_string = try start_date.toStringZ(allocator);
         const end_string = try end_date.toStringZ(allocator);
         defer allocator.free(start_string);
         defer allocator.free(end_string);
 
-        const nameZ = try allocator.dupeZ(u8, self.name);
+        const nameZ = try allocator.dupeZ(u8, name);
         defer allocator.free(nameZ);
-
         try db.prepare("INSERT INTO Events(Name, Start, End) VALUES(?, ?, ?)");
         try db.bindText(1, nameZ);
         try db.bindText(2, start_string);
@@ -49,7 +52,7 @@ const AddCmd = struct {
         try db.executeAndFinish();
     }
 };
-const RmCmd = struct {
+pub const RmCmd = struct {
     const Self = @This();
     const pattern = "rm (.*)";
     id: i32,
@@ -58,8 +61,11 @@ const RmCmd = struct {
         return .{ .id = id };
     }
     pub fn execute(self: Self, db: *Database) !void {
+        try Self.remove(db, self.id);
+    }
+    pub fn remove(db: *Database, id: i32) !void {
         try db.prepare("DELETE FROM Events WHERE rowid == ?;");
-        try db.bindInt(1, self.id);
+        try db.bindInt(1, id);
         try db.executeAndFinish();
     }
 };

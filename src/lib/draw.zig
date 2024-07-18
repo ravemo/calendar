@@ -25,6 +25,7 @@ const text_color = arc.colorFromHex(0x000000ff);
 const grid_color = arc.colorFromHex(0xeeeeeeff);
 const divider_color = arc.colorFromHex(0xaaaaaaff);
 const event_color = arc.colorFromHex(0x1f842188);
+const selected_event_color = arc.colorFromHex(0x2fc46188);
 const TaskColor = enum {
     red,
     orange,
@@ -54,7 +55,7 @@ pub fn drawGrid(sf: Surface) void {
     }
 }
 
-pub fn drawEvent(wv: *WeekView, event: Event) !void {
+pub fn drawEvent(wv: *WeekView, event: Event, selected: bool) !void {
     const renderer = wv.sf.renderer;
     // if the event crosses the day boundary, but does not end at midnight
     if (event.start.getDayStart().isBefore(event.getEnd().getDayStart()) and
@@ -63,12 +64,12 @@ pub fn drawEvent(wv: *WeekView, event: Event) !void {
         const split = event.start.after(.{ .days = 1 }).getDayStart();
         var head = event;
         head.duration = split.timeSince(event.start);
-        try drawEvent(wv, head);
+        try drawEvent(wv, head, selected);
 
         var tail = event;
         tail.start = split;
         tail.duration = tail.duration.sub(head.duration);
-        try drawEvent(wv, tail);
+        try drawEvent(wv, tail, selected);
         return;
     }
 
@@ -90,7 +91,11 @@ pub fn drawEvent(wv: *WeekView, event: Event) !void {
 
     const x = wv.sf.xFromDate(draw_event.start).? + 3;
     const y = wv.sf.yFromHour(draw_event.start.getHourF());
-    arc.setColor(renderer, event_color);
+    if (selected) {
+        arc.setColor(renderer, selected_event_color);
+    } else {
+        arc.setColor(renderer, event_color);
+    }
     const rect = c.SDL_FRect{
         .x = x,
         .y = y,
@@ -164,7 +169,7 @@ pub fn drawTask(wv: *WeekView, task: Task, now: Date) !void {
     try drawSingleTask(wv, task);
 }
 
-pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Date, cursor: Date) !void {
+pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Date, cursor: Date, selected_event: ?*Event) !void {
     const renderer = wv.sf.renderer;
     _ = c.SDL_SetRenderTarget(renderer, wv.sf.tex);
     arc.setColor(renderer, background_color);
@@ -182,7 +187,7 @@ pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Da
     const view_end = wv.start.after(.{ .weeks = 1 });
     events_it.reset(wv.start);
     while (events_it.next(view_end)) |e|
-        try drawEvent(wv, e);
+        try drawEvent(wv, e, selected_event != null and e.id == selected_event.?.id);
 
     for (tasks) |t|
         try drawTask(wv, t, now);

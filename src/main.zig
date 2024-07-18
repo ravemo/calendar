@@ -26,11 +26,30 @@ const task = @import("lib/task.zig");
 const Task = task.Task;
 const TaskList = task.TaskList;
 const Scheduler = @import("lib/scheduler.zig").Scheduler;
+const commands_lib = @import("cli/commands.zig");
+const AddCmd = commands_lib.AddCmd;
+const RmCmd = commands_lib.RmCmd;
 
 var scrn_w: f32 = 800;
 var scrn_h: f32 = 600;
 
 var wakeEvent: u32 = undefined;
+
+fn getDeltaDate(sf: Surface, x0: f32, y0: f32, x1: f32, y1: f32) struct { day: i32, hour: f32 } {
+    const d_day: i32 = sf.weekdayFromX(x1) - sf.weekdayFromX(x0);
+    const d_hr: f32 = sf.hourFromY(y1) - sf.hourFromY(y0);
+    return .{
+        .day = d_day,
+        .hour = @round(d_hr * 4) / 4,
+    };
+}
+
+test "delta time" {
+    const sf = Surface.init(null, 0, 0, 60, 40);
+    const d = getDeltaDate(sf, 15, 20, 15, 20);
+    try std.testing.expectEqual(0, d.day);
+    try std.testing.expectEqual(0, d.hour);
+}
 
 fn resetZoomTo(sf: *Surface, hourF: f32) void {
     sf.zoom = 0;
@@ -107,6 +126,7 @@ pub fn main() !void {
     resetZoom(&hours_surface);
     resetZoom(&weekview.sf);
 
+    var selected_event: ?*Event = null;
     var dragging_event: ?*Event = null;
     var is_dragging_end = false; // Whether you are dragging the start of the event or the end
     var original_dragging_event: ?Event = null;
@@ -149,6 +169,13 @@ pub fn main() !void {
                         resetZoomTo(&hours_surface, Date.now().getHourF());
                         resetZoomTo(&weekview.sf, Date.now().getHourF());
                     },
+                    c.SDL_SCANCODE_DELETE => {
+                        if (selected_event) |se| {
+                            update = true;
+                            try RmCmd.remove(&events_db, se.id);
+                            events.remove(se.id);
+                        }
+                    },
                     else => {},
                 },
                 c.SDL_KEYUP => switch (ev.key.keysym.scancode) {
@@ -162,7 +189,8 @@ pub fn main() !void {
                     if (keystates[c.SDL_SCANCODE_LCTRL] != 0x00) {
                         const x = @as(f32, @floatFromInt(ev.button.x)) - weekview.sf.w / 7 / 2 - weekview.sf.x;
                         const y = @as(f32, @floatFromInt(ev.button.y)) - weekview.sf.y;
-                        cursor.setHourF(weekview.sf.hourFromY(y));
+                        const h = @round(4 * weekview.sf.hourFromY(y)) / 4.0;
+                        cursor.setHourF(h);
                         cursor.setWeekday(@enumFromInt(weekview.sf.weekdayFromX(x)));
                         cursor.update();
                     } else if (weekview.getEventRectBelow(ev.button.x, ev.button.y)) |er| {
@@ -177,31 +205,35 @@ pub fn main() !void {
                     }
                 },
                 c.SDL_MOUSEBUTTONUP => {
+                    selected_event = null;
                     if (dragging_event) |e_ptr| {
-                        try events_db.updateEvent(alloc, e_ptr.*);
+                        const mx: f32 = @floatFromInt(ev.motion.x);
+                        const my: f32 = @floatFromInt(ev.motion.y);
+                        const d = getDeltaDate(weekview.sf, dragging_start_x, dragging_start_y, mx, my);
+                        if (d.day == 0 and d.hour == 0.0) {
+                            selected_event = e_ptr;
+                        } else {
+                            try events_db.updateEvent(alloc, e_ptr.*);
+                        }
                         dragging_event = null;
                     }
                 },
                 c.SDL_MOUSEMOTION => {
                     if (dragging_event) |ev_ptr| {
-                        const sf = weekview.sf;
                         const mx: f32 = @floatFromInt(ev.motion.x);
                         const my: f32 = @floatFromInt(ev.motion.y);
+                        var d = getDeltaDate(weekview.sf, dragging_start_x, dragging_start_x, mx, my);
+
                         const oev = original_dragging_event.?;
-
-                        const d_day: i32 = sf.weekdayFromX(mx) - sf.weekdayFromX(dragging_start_x);
-                        var d_hr: f32 = sf.hourFromY(my) - sf.hourFromY(dragging_start_y);
-                        d_hr = @round(d_hr * 2) / 2; // Move in steps of 30 minutes
-
                         if (is_dragging_end) {
-                            d_hr = d_hr + @as(f32, @floatFromInt(d_day)) * 24;
-                            ev_ptr.duration = oev.duration.add(Time.initHF(d_hr));
-                            if (ev_ptr.duration.shorterThan(.{ .minutes = 30 })) {
-                                ev_ptr.duration = .{ .minutes = 30 };
+                            d.hour = d.hour + @as(f32, @floatFromInt(d.day)) * 24;
+                            ev_ptr.duration = oev.duration.add(Time.initHF(d.hour));
+                            if (ev_ptr.duration.shorterThan(.{ .minutes = 15 })) {
+                                ev_ptr.duration = .{ .minutes = 15 };
                             }
                         } else { // if dragging the end point of the event
-                            ev_ptr.start.setDay(oev.start.getDay() + d_day);
-                            ev_ptr.start.setHourF(oev.start.getHourF() + d_hr);
+                            ev_ptr.start.setDay(oev.start.getDay() + d.day);
+                            ev_ptr.start.setHourF(oev.start.getHourF() + d.hour);
                         }
                     } else {
                         if (tooltip) |_| {
@@ -278,7 +310,7 @@ pub fn main() !void {
 
         var events_it = try EventIterator.init(alloc, events.events.items, weekview.start);
         defer events_it.deinit();
-        try draw.drawWeek(&weekview, &events_it, display_tasks.tasks.items, Date.now(), cursor);
+        try draw.drawWeek(&weekview, &events_it, display_tasks.tasks.items, Date.now(), cursor, selected_event);
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);
 

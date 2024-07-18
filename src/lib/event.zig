@@ -99,6 +99,18 @@ pub const EventList = struct {
             .allocator = self.allocator,
         };
     }
+
+    pub fn remove(self: *Self, id: i32) void {
+        var i: usize = 0;
+        while (i < self.events.items.len) {
+            if (i != id) {
+                i += 1;
+                continue;
+            }
+
+            _ = self.events.swapRemove(i);
+        }
+    }
 };
 
 pub fn cmpByStartDate(_: void, a: Event, b: Event) bool {
