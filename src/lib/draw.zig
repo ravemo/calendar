@@ -217,13 +217,13 @@ pub fn drawHours(sf: Surface, now: Date) void {
         const y: f32 = sep * @as(f32, @floatFromInt(i)) + sf.sy;
         var buf: [6:0]u8 = undefined;
         buf = std.mem.bytesToValue([6:0]u8, std.fmt.bufPrintZ(&buf, "{}:00", .{i}) catch "error");
-        text.drawText(renderer, &buf, sf.w - 10, y + sep / 2, -1, -1, .Right, .Center);
+        text.drawText(renderer, &buf, sf.w - 20, y, -1, -1, .Right, .Center);
     }
 
     arc.setColor(renderer, divider_color);
     for (0..24) |i| {
         const y: f32 = sep * @as(f32, @floatFromInt(i)) + sf.sy;
-        _ = c.SDL_RenderDrawLineF(renderer, 0, y, sf.w, y);
+        _ = c.SDL_RenderDrawLineF(renderer, sf.w - 15, y, sf.w, y);
     }
     _ = c.SDL_SetRenderTarget(renderer, null);
 }
