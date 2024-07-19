@@ -428,7 +428,7 @@ pub const TaskList = struct {
         var it_count: usize = 0;
         while (true) {
             it_count += 1;
-            if (it_count > 10) {
+            if (it_count > 100) {
                 @panic("Something is wrong, too many iterations");
             }
             for (self.tasks.items) |original_t| {
