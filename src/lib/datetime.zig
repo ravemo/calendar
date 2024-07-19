@@ -311,10 +311,11 @@ pub const Date = struct {
         });
     }
 
-    pub fn earliest(a_opt: ?Date, b: ?Date) ?Date {
-        if (a_opt) |a| {
-            return if (a.isBefore(b)) a else b;
-        } else return b;
+    pub fn earliest(a: ?Date, b: ?Date) ?Date {
+        return if (Date.isBefore(a, b)) a else b;
+    }
+    pub fn latest(a: ?Date, b: ?Date) ?Date {
+        return if (Date.isBefore(a, b)) b else a;
     }
 
     pub fn getWeekStart(self: Self) Date {

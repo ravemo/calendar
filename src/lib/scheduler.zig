@@ -292,11 +292,10 @@ pub const Scheduler = struct {
         self.intervals = try IntervalIterator.init(self.allocator, event_list, tasks, self.start);
     }
 
-    pub fn scheduleTasks(self: *Self, tl: *TaskList) !TaskList {
+    pub fn scheduleTasks(self: *Self, tl: *TaskList, limit: Date) !TaskList {
         var scheduled = TaskList.initEmpty(self.allocator);
 
         var interval = self.intervals.intervals.items[0];
-        const limit = self.start.after(.{ .weeks = 1 }).getWeekStart();
 
         tl.reset();
         while (interval.start.isBefore(limit)) {

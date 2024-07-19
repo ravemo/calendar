@@ -122,7 +122,7 @@ pub fn main() !void {
 
     var scheduler = try Scheduler.init(alloc, events.events.items, base_tasks, Date.now());
     defer scheduler.deinit();
-    var display_tasks = try scheduler.scheduleTasks(&base_tasks);
+    var display_tasks = try scheduler.scheduleTasks(&base_tasks, Date.now().after(.{ .weeks = 1 }).getWeekStart());
     defer display_tasks.deinit();
 
     var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
@@ -213,6 +213,7 @@ pub fn main() !void {
                             const tmp: i32 = @intCast(sc - c.SDL_SCANCODE_COMMA);
                             const d_weeks = tmp * 2 - 1;
                             weekview.start = weekview.start.after(.{ .weeks = d_weeks });
+                            update = true;
                         }
                     },
                     c.SDL_SCANCODE_F5 => update = true,
@@ -379,6 +380,8 @@ pub fn main() !void {
             if (c.SDL_PollEvent(&ev) == 0) break;
         }
 
+        const render_start = Date.latest(weekview.start, Date.now()).?;
+
         if (update) {
             c.SDL_SetCursor(wait_cursor);
             events.deinit();
@@ -388,7 +391,7 @@ pub fn main() !void {
             try base_tasks.sanitize();
             try scheduler.reset(events.events.items, base_tasks, Date.now());
             display_tasks.deinit();
-            display_tasks = try scheduler.scheduleTasks(&base_tasks);
+            display_tasks = try scheduler.scheduleTasks(&base_tasks, render_start.after(.{ .weeks = 1 }).getWeekStart());
             cursor = Date.now();
             c.SDL_SetCursor(normal_cursor);
             update = false;
@@ -398,7 +401,7 @@ pub fn main() !void {
 
         var events_it = try EventIterator.init(alloc, events.events.items, weekview.start);
         defer events_it.deinit();
-        try draw.drawWeek(&weekview, &events_it, display_tasks.tasks.items, Date.now(), cursor, selected_event);
+        try draw.drawWeek(&weekview, &events_it, display_tasks.tasks.items, render_start, cursor, selected_event);
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);
 
