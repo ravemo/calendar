@@ -110,7 +110,12 @@ pub fn drawEvent(wv: *WeekView, event: Event, selected: bool) !void {
     text.drawText(renderer, draw_event.name, x + 2, y + 2, rect.w - 4, rect.h - 4, .Left, .Top);
 }
 
-pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
+pub fn drawTask(wv: *WeekView, task: Task, now: Date, selected: bool) !void {
+    _ = now; // TODO: Draw tasks greyed-out if they are already past
+
+    // TODO Check task's start and due to see whether it would even appear on
+    // the current week view
+
     std.debug.assert(task.scheduled_start != null);
     if (!task.getEnd().?.eql(task.getEnd().?.getDayStart()))
         std.debug.assert(task.scheduled_start.?.getDay() == task.getEnd().?.getDay());
@@ -146,30 +151,36 @@ pub fn drawSingleTask(wv: *WeekView, task: Task) !void {
     else
         .blue;
     const task_color = task_colors[@intFromEnum(task_color_enum)];
-    arc.setColor(renderer, arc.setAlpha(task_color, alpha));
     const rect = c.SDL_FRect{
         .x = x,
         .y = y + 1,
         .w = wv.sf.w / 7 - 5,
         .h = h * wv.sf.h / 24 - 1,
     };
-    _ = c.SDL_RenderFillRectF(renderer, &rect);
+    if (selected) {
+        arc.setColor(renderer, arc.invertColor(task_color));
+        _ = c.SDL_RenderFillRectF(renderer, &rect);
+        arc.setColor(renderer, arc.setAlpha(task_color, alpha));
+        const border = 3;
+        const new_rect = c.SDL_FRect{
+            .x = rect.x + border,
+            .y = rect.y + border,
+            .w = rect.w - 2 * border,
+            .h = rect.h - 2 * border,
+        };
+        _ = c.SDL_RenderFillRectF(renderer, &new_rect);
+    } else {
+        arc.setColor(renderer, arc.setAlpha(task_color, alpha));
+        _ = c.SDL_RenderFillRectF(renderer, &rect);
+    }
     try wv.taskRects.append(.{ .id = draw_task.id, .rect = rect });
 
     arc.setColor(renderer, text_color);
     if (rect.h > 20)
         text.drawText(renderer, draw_task.name, x + 2, y + 2, rect.w - 4, rect.h - 4, .Left, .Top);
 }
-pub fn drawTask(wv: *WeekView, task: Task, now: Date) !void {
-    _ = now; // TODO: Draw tasks greyed-out if they are already past
 
-    // TODO Check task's start and due to see whether it would even appear on
-    // the current week view
-
-    try drawSingleTask(wv, task);
-}
-
-pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Date, cursor: Date, selected_event: ?*Event) !void {
+pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Date, cursor: Date, selected_task: ?*Task, selected_event: ?*Event) !void {
     const renderer = wv.sf.renderer;
     _ = c.SDL_SetRenderTarget(renderer, wv.sf.tex);
     arc.setColor(renderer, background_color);
@@ -190,7 +201,7 @@ pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Da
         try drawEvent(wv, e, selected_event != null and e.id == selected_event.?.id);
 
     for (tasks) |t|
-        try drawTask(wv, t, now);
+        try drawTask(wv, t, now, selected_task != null and t.id == selected_task.?.id);
 
     if (wv.sf.xFromDate(cursor)) |x| {
         const y = wv.sf.yFromHour(cursor.getHourF());

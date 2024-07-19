@@ -8,11 +8,14 @@ pub const Color = sdl.SDL_Color;
 pub fn setColor(renderer: anytype, c: Color) void {
     _ = sdl.SDL_SetRenderDrawColor(@ptrCast(renderer), c.r, c.g, c.b, c.a);
 }
+pub fn colorFromHex(hex: u32) Color {
+    return @bitCast(@byteSwap(@as(u32, hex)));
+}
 pub fn setAlpha(c: Color, a: u8) Color {
     return .{ .r = c.r, .g = c.g, .b = c.b, .a = a };
 }
-pub fn colorFromHex(hex: u32) Color {
-    return @bitCast(@byteSwap(@as(u32, hex)));
+pub fn invertColor(c: Color) Color {
+    return .{ .r = 255 - c.r, .g = 255 - c.g, .b = 255 - c.b, .a = c.a };
 }
 
 pub fn rgb_from_hsv(h: f32, s: f32, v: f32) Color {

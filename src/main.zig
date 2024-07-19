@@ -112,7 +112,7 @@ pub fn main() !void {
     var events_db = try Database.init("calendar.db");
     defer events_db.deinit();
     // TODO: Use proper user_data_dir-like function when releasing to the public
-    const tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
+    var tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
     defer tasks_db.deinit();
     var events = try EventList.init(alloc, events_db);
     defer events.deinit();
@@ -134,6 +134,8 @@ pub fn main() !void {
 
     resetZoom(&hours_surface);
     resetZoom(&weekview.sf);
+
+    var selected_task: ?*Task = null;
 
     var selected_event: ?*Event = null;
     var dragging_event: ?*Event = null;
@@ -223,6 +225,21 @@ pub fn main() !void {
                         resetZoomTo(&weekview.sf, Date.now().getHourF());
                     },
                     c.SDL_SCANCODE_A => {},
+                    c.SDL_SCANCODE_D => if (selected_task) |t| {
+                        const now_string = try Date.now().toStringZ(alloc);
+                        defer alloc.free(now_string);
+                        if (t.repeat == null) {
+                            try tasks_db.prepare("UPDATE tasks SET status = ? WHERE uuid = ?;");
+                            try tasks_db.bindText(1, now_string);
+                            try tasks_db.bindInt(2, t.id);
+                            try tasks_db.executeAndFinish();
+                            update = true;
+                        } else {
+                            @panic("'Mark as done' not implemented for repeating tasks.");
+                        }
+
+                        selected_task = null;
+                    },
                     c.SDL_SCANCODE_DELETE => {
                         if (selected_event) |se| {
                             update = true;
@@ -241,6 +258,7 @@ pub fn main() !void {
                     else => {},
                 },
                 c.SDL_MOUSEBUTTONDOWN => blk: {
+                    selected_task = null;
                     if (show_popup) {
                         if (!intersects(ev.button.x, ev.button.y, popup_window_rect)) {
                             // cancel everything that was done
@@ -289,6 +307,12 @@ pub fn main() !void {
                             dragging_start_y = @floatFromInt(ev.button.y);
                             dragging_event = e;
                             original_dragging_event = e.*;
+                            break;
+                        }
+                    } else if (weekview.getTaskRectBelow(ev.button.x, ev.button.y)) |tr| {
+                        for (base_tasks.tasks.items) |*t| {
+                            if (t.id != tr.id) continue;
+                            selected_task = t;
                             break;
                         }
                     }
@@ -401,7 +425,7 @@ pub fn main() !void {
 
         var events_it = try EventIterator.init(alloc, events.events.items, weekview.start);
         defer events_it.deinit();
-        try draw.drawWeek(&weekview, &events_it, display_tasks.tasks.items, render_start, cursor, selected_event);
+        try draw.drawWeek(&weekview, &events_it, display_tasks.tasks.items, render_start, cursor, selected_task, selected_event);
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);
 
