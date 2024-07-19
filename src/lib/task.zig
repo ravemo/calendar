@@ -59,11 +59,17 @@ pub const Task = struct {
         if (new_t.repeat) |repeat| {
             // TODO: Do some math so you can just multiple the repeat by the correct number
             // so you don't have to do this loop
-            while (Date.isBefore(new_t.due.?, date)) {
-                new_t.start = new_t.start.?.after(repeat);
-                new_t.due = new_t.due.?.after(repeat);
-                new_t.earliest_due = new_t.earliest_due.?.after(repeat);
-            }
+            if (new_t.due != null) {
+                while (Date.isBefore(new_t.due.?, date)) {
+                    new_t.start = new_t.start.?.after(repeat);
+                    new_t.due = new_t.due.?.after(repeat);
+                    new_t.earliest_due = new_t.earliest_due.?.after(repeat);
+                }
+            } else if (new_t.start != null) {
+                while (Date.isBefore(new_t.start.?, date)) {
+                    new_t.start = new_t.start.?.after(repeat);
+                }
+            } else @panic("Repeating task with no start nor due date found!");
         }
         return new_t;
     }
@@ -316,7 +322,7 @@ pub const TaskList = struct {
             std.debug.assert(best.scheduled_start.?.getDay() == best.getEnd().?.getDay());
         std.debug.assert(best.getEnd().?.isBeforeEq(interval.end));
 
-        const ret_interval = Interval{ .start = best.getEnd().?, .end = interval.end };
+        const ret_interval = Interval{ .start = best.getEnd().?, .end = interval.end, .free = interval.free };
         const completed = best.getEnd().?.eql(interval.end);
         if (did_cut) {
             if (!completed) {
@@ -465,6 +471,7 @@ pub const TaskList = struct {
     }
 
     pub fn checkOverlap(self: Self) !void {
+        if (self.tasks.items.len == 0) return;
         var last_end = self.tasks.items[0].getEnd().?;
         for (self.tasks.items[1..]) |task| {
             const new_start = task.scheduled_start.?;
