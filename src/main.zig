@@ -335,7 +335,7 @@ pub fn main() !void {
                     if (dragging_event) |ev_ptr| {
                         const mx: f32 = @floatFromInt(ev.motion.x);
                         const my: f32 = @floatFromInt(ev.motion.y);
-                        var d = getDeltaDate(weekview.sf, dragging_start_x, dragging_start_x, mx, my);
+                        var d = getDeltaDate(weekview.sf, dragging_start_x, dragging_start_y, mx, my);
 
                         const oev = original_dragging_event.?;
                         if (is_dragging_end) {
