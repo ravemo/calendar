@@ -120,13 +120,9 @@ const IntervalIterator = struct {
         }
         try self.splits.ensureTotalCapacity(1 + split_count);
         try self.free.ensureTotalCapacity(1 + split_count);
-        std.debug.assert(std.sort.isSorted(i32, self.splits.items, {}, std.sort.asc(i32)));
 
         // Split intervals at tasks starts
-        const sorted_tasks = try tasks.tasks.clone();
-        defer sorted_tasks.deinit();
-        std.mem.sort(Task, sorted_tasks.items, {}, cmpByStartDate);
-        for (sorted_tasks.items) |t| {
+        for (tasks.tasks.items) |t| {
             if (t.repeat) |_| {
                 const repeat = t.repeat.?.getSeconds();
                 var task_start = t.start.?.timeSince(self.start).getSeconds();
@@ -146,9 +142,17 @@ const IntervalIterator = struct {
                 if (t.due) |d| self.split(d.timeSince(self.start).getSeconds());
             }
         }
-        std.debug.assert(std.sort.isSorted(i32, self.splits.items, {}, std.sort.asc(i32)));
-        for (0..self.splits.items.len - 1) |i|
-            std.debug.assert(self.splits.items[i] != self.splits.items[i + 1]);
+        std.mem.sort(i32, self.splits.items, {}, std.sort.asc(i32));
+        std.debug.assert(self.splits.items.len == self.free.items.len);
+        {
+            var i: usize = 0;
+            while (i < self.splits.items.len - 1) {
+                if (self.splits.items[i] == self.splits.items[i + 1]) {
+                    _ = self.splits.orderedRemove(i);
+                    _ = self.free.orderedRemove(i);
+                } else i += 1;
+            }
+        }
 
         // Remove event intervals from interval list
         while (events.next(limit)) |e| {
@@ -231,7 +235,7 @@ const IntervalIterator = struct {
         }
         const start_i = start_i_opt.?;
 
-        const last_free = self.free.items[last_i];
+        const last_free = self.free.items[start_i];
         for (0..self.splits.items.len - 1) |i|
             std.debug.assert(self.splits.items[i] != self.splits.items[i + 1]);
 
@@ -243,34 +247,9 @@ const IntervalIterator = struct {
     }
 
     fn split(self: *Self, s: i32) void {
-        if (self.splits.getLast() < s) {
-            self.splits.appendAssumeCapacity(s);
-            self.free.appendAssumeCapacity(true);
-            return;
-        }
         if (s < self.splits.items[0]) return;
-        var min_i: usize = 0;
-        var max_i: usize = self.splits.items.len - 1;
-        var i: usize = @divFloor(min_i + max_i, 2);
-        while (true) {
-            const cur_s = self.splits.items[i];
-            if (cur_s > s) {
-                max_i = i;
-            } else if (cur_s < s) {
-                min_i = i;
-            }
-            i = @divFloor(min_i + max_i, 2);
-            if (self.splits.items[min_i] == s or
-                self.splits.items[max_i] == s or
-                self.splits.items[i] == s) break;
-            if (max_i <= min_i + 1) {
-                std.debug.assert(self.splits.items[i] < s);
-                std.debug.assert(i == self.splits.items.len - 1 or s < self.splits.items[i + 1]);
-                self.splits.insertAssumeCapacity(i + 1, s);
-                self.free.insertAssumeCapacity(i + 1, true);
-                return;
-            }
-        }
+        self.splits.appendAssumeCapacity(s);
+        self.free.appendAssumeCapacity(true);
     }
 };
 
