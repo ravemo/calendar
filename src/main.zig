@@ -9,6 +9,7 @@ const datetime = @import("lib/datetime.zig");
 const StringError = datetime.StringError;
 const Date = datetime.Date;
 const Time = datetime.Time;
+const Period = datetime.Period;
 const event_lib = @import("lib/event.zig");
 const Event = event_lib.Event;
 const EventList = event_lib.EventList;
@@ -30,10 +31,18 @@ const commands_lib = @import("cli/commands.zig");
 const AddCmd = commands_lib.AddCmd;
 const RmCmd = commands_lib.RmCmd;
 
+const text = @import("lib/text.zig");
+const arc = @import("lib/arc.zig");
+
 var scrn_w: f32 = 800;
 var scrn_h: f32 = 600;
 
 var wakeEvent: u32 = undefined;
+
+fn intersects(x: i32, y: i32, rect: c.SDL_Rect) bool {
+    return x >= rect.x and x <= rect.x + rect.w and
+        y >= rect.y and y <= rect.y + rect.h;
+}
 
 fn getDeltaDate(sf: Surface, x0: f32, y0: f32, x1: f32, y1: f32) struct { day: i32, hour: f32 } {
     const d_day: i32 = sf.weekdayFromX(x1) - sf.weekdayFromX(x0);
@@ -144,6 +153,43 @@ pub fn main() !void {
     var cursor = Date.now();
     var tooltip_text: []const u8 = undefined;
     var tooltip: ?Tooltip = null;
+
+    const RepeatOption = enum { Once, Daily, Weekly, Monthly };
+    const repeat_option_count = @typeInfo(RepeatOption).Enum.fields.len;
+    var repeat_option: RepeatOption = .Once;
+    var textbox_text = std.ArrayList(u8).init(alloc);
+    defer textbox_text.deinit();
+    var show_popup: bool = false;
+    const popup_window_rect: c.SDL_Rect = .{
+        .x = @as(i32, @intFromFloat(scrn_w / 2)) - 50,
+        .y = @as(i32, @intFromFloat(scrn_h / 2)) - 50,
+        .w = 100,
+        .h = 100,
+    };
+    const popup_textbox_rect: c.SDL_Rect = .{
+        .x = @as(i32, @intFromFloat(scrn_w / 2)) - 40,
+        .y = @as(i32, @intFromFloat(scrn_h / 2)) - 40,
+        .w = 80,
+        .h = 20,
+    };
+    var popup_radio_rects: [repeat_option_count]c.SDL_Rect = undefined;
+    for (0..repeat_option_count) |i| {
+        const sep: i32 = @divFloor(80, repeat_option_count);
+        popup_radio_rects[i] = .{
+            .x = @as(i32, @intFromFloat(scrn_w / 2)) - 35 + @as(i32, @intCast(i)) * sep,
+            .y = @as(i32, @intFromFloat(scrn_h / 2)) - 5,
+            .w = 10,
+            .h = 10,
+        };
+    }
+    const popup_button_rect: c.SDL_Rect = .{
+        .x = @as(i32, @intFromFloat(scrn_w / 2)) - 30,
+        .y = @as(i32, @intFromFloat(scrn_h / 2)) + 20,
+        .w = 60,
+        .h = 20,
+    };
+
+    c.SDL_StopTextInput();
     mainLoop: while (true) {
         // Control
         var ev: c.SDL_Event = undefined;
@@ -153,7 +199,13 @@ pub fn main() !void {
         while (true) {
             switch (ev.type) {
                 c.SDL_QUIT => break :mainLoop,
-                c.SDL_KEYDOWN => switch (ev.key.keysym.scancode) {
+                c.SDL_TEXTINPUT => {
+                    for (ev.text.text) |char| {
+                        if (char == 0) break;
+                        try textbox_text.append(char);
+                    }
+                },
+                c.SDL_KEYDOWN => if (!show_popup) switch (ev.key.keysym.scancode) {
                     c.SDL_SCANCODE_Q => break :mainLoop,
                     c.SDL_SCANCODE_COMMA, c.SDL_SCANCODE_PERIOD => |sc| {
                         if (ev.key.keysym.mod & c.KMOD_SHIFT != 0) {
@@ -169,6 +221,7 @@ pub fn main() !void {
                         resetZoomTo(&hours_surface, Date.now().getHourF());
                         resetZoomTo(&weekview.sf, Date.now().getHourF());
                     },
+                    c.SDL_SCANCODE_A => {},
                     c.SDL_SCANCODE_DELETE => {
                         if (selected_event) |se| {
                             update = true;
@@ -178,10 +231,45 @@ pub fn main() !void {
                     },
                     else => {},
                 },
-                c.SDL_KEYUP => switch (ev.key.keysym.scancode) {
+                c.SDL_KEYUP => if (!show_popup) switch (ev.key.keysym.scancode) {
+                    c.SDL_SCANCODE_A => {
+                        textbox_text.clearRetainingCapacity();
+                        c.SDL_StartTextInput();
+                        show_popup = true;
+                    },
                     else => {},
                 },
-                c.SDL_MOUSEBUTTONDOWN => {
+                c.SDL_MOUSEBUTTONDOWN => blk: {
+                    if (show_popup) {
+                        if (!intersects(ev.button.x, ev.button.y, popup_window_rect)) {
+                            // cancel everything that was done
+                            show_popup = false;
+                            c.SDL_StopTextInput();
+                        } else {
+                            for (popup_radio_rects, 0..) |rect, i| {
+                                if (intersects(ev.button.x, ev.button.y, rect)) {
+                                    repeat_option = @enumFromInt(i);
+                                    break;
+                                }
+                            }
+                            if (intersects(ev.button.x, ev.button.y, popup_button_rect)) {
+                                update = true;
+                                const start_date = cursor;
+                                const end_date = cursor.after(.{ .hours = 2 });
+                                const period = switch (repeat_option) {
+                                    .Once => null,
+                                    .Daily => Period{ .time = Time{ .days = 1 } },
+                                    .Weekly => Period{ .time = Time{ .weeks = 1 } },
+                                    .Monthly => Period{ .time = Time{ .weeks = 4 } },
+                                };
+                                try AddCmd.createEvent(&events_db, alloc, textbox_text.items, start_date, end_date, period);
+                                show_popup = false;
+                                c.SDL_StopTextInput();
+                            }
+                            break :blk;
+                        }
+                    }
+
                     if (tooltip) |_| {
                         alloc.free(tooltip_text);
                         tooltip = null;
@@ -321,6 +409,37 @@ pub fn main() !void {
         hours_surface.draw();
 
         if (tooltip) |tt| try tt.draw(renderer);
+
+        if (show_popup) {
+            _ = c.SDL_SetRenderDrawColor(renderer, 0xEE, 0xEE, 0xEE, 0xFF);
+            _ = c.SDL_RenderFillRect(renderer, &popup_window_rect);
+
+            _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
+            _ = c.SDL_RenderFillRect(renderer, &popup_textbox_rect);
+            arc.setColor(renderer, arc.colorFromHex(0x000000FF));
+            text.drawText(
+                renderer,
+                textbox_text.items,
+                @floatFromInt(popup_textbox_rect.x),
+                @floatFromInt(popup_textbox_rect.y),
+                @floatFromInt(popup_textbox_rect.w),
+                @floatFromInt(popup_textbox_rect.h),
+                .Left,
+                .Top,
+            );
+
+            for (popup_radio_rects, 0..) |r, i| {
+                if (i == @intFromEnum(repeat_option)) {
+                    arc.setColor(renderer, arc.colorFromHex(0x000000FF));
+                } else {
+                    arc.setColor(renderer, arc.colorFromHex(0xFFFFFFFF));
+                }
+                _ = c.SDL_RenderFillRect(renderer, &r);
+            }
+
+            _ = c.SDL_SetRenderDrawColor(renderer, 0xDF, 0xDF, 0xDF, 0xFF);
+            _ = c.SDL_RenderFillRect(renderer, &popup_button_rect);
+        }
 
         c.SDL_RenderPresent(renderer);
     }

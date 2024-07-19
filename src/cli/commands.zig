@@ -9,7 +9,9 @@ const Database = @import("../lib/database.zig").Database;
 const datetime = @import("../lib/datetime.zig");
 const StringError = datetime.StringError;
 const RepeatInfo = datetime.RepeatInfo;
+const Period = datetime.Period;
 const Date = datetime.Date;
+const Time = datetime.Time;
 
 pub const AddCmd = struct {
     const Self = @This();
@@ -34,10 +36,10 @@ pub const AddCmd = struct {
         const start_date = try Date.fromString(start_input);
         const end_date = try Date.fromString(end_input);
 
-        try Self.createEvent(db, allocator, self.name, start_date, end_date);
+        try Self.createEvent(db, allocator, self.name, start_date, end_date, null);
     }
 
-    pub fn createEvent(db: *Database, allocator: std.mem.Allocator, name: []const u8, start_date: Date, end_date: Date) !void {
+    pub fn createEvent(db: *Database, allocator: std.mem.Allocator, name: []const u8, start_date: Date, end_date: Date, repeat_period: ?Period) !void {
         const start_string = try start_date.toStringZ(allocator);
         const end_string = try end_date.toStringZ(allocator);
         defer allocator.free(start_string);
@@ -50,6 +52,11 @@ pub const AddCmd = struct {
         try db.bindText(2, start_string);
         try db.bindText(3, end_string);
         try db.executeAndFinish();
+
+        if (repeat_period) |period| {
+            const last_id = db.getLastInsertedRowid();
+            try RepeatCmd.repeat(db, allocator, last_id, period);
+        }
     }
 };
 pub const RmCmd = struct {
@@ -114,30 +121,37 @@ const RenameCmd = struct {
     }
 };
 
-const RepeatCmd = struct {
+pub const RepeatCmd = struct {
     const Self = @This();
     const pattern = "repeat (-?\\d+) (.*)";
     id: i32,
     repeat_info: RepeatInfo,
+
     fn init(cap: *Captures) !Self {
         const id = try std.fmt.parseInt(i32, cap.sliceAt(1).?, 10);
         const repeat_info = try RepeatInfo.fromString(cap.sliceAt(2).?);
         return .{ .id = id, .repeat_info = repeat_info };
     }
-    pub fn execute(self: Self, allocator: std.mem.Allocator, db: *Database) !void {
-        const period = try self.repeat_info.period.toString(allocator);
-        defer allocator.free(period);
-        const end = if (self.repeat_info.end) |e| try e.toString(allocator) else null;
-        defer if (end) |s| allocator.free(s);
+
+    pub fn execute(self: Self, alloc: std.mem.Allocator, db: *Database) !void {
+        try Self.repeat(db, alloc, self.id, self.repeat_info.period);
+    }
+
+    pub fn repeat(db: *Database, alloc: std.mem.Allocator, id: i32, period: Period) !void {
+        const period_str = try period.toString(alloc);
+        defer alloc.free(period_str);
+        // TODO: Support repeat info end
+        // const end = if (self.repeat_info.end) |e| try e.toString(alloc) else null;
+        // defer if (end) |s| alloc.free(s);
 
         try db.prepare("INSERT INTO Repeats(Period, End) VALUES(?, ?)");
-        try db.bindText(1, period);
-        if (end) |e| try db.bindText(2, e) else try db.bindNull(2);
+        try db.bindText(1, period_str);
+        // if (end) |e| try db.bindText(2, e) else try db.bindNull(2);
         try db.executeAndFinish();
 
         try db.prepare("UPDATE Events SET Repeat = ? WHERE Id = ?;");
         try db.bindInt(1, db.getLastInsertedRowid());
-        try db.bindInt(2, self.id);
+        try db.bindInt(2, id);
         try db.executeAndFinish();
     }
 };

@@ -21,6 +21,7 @@ pub fn drawText(renderer: anytype, label: []const u8, x: f32, y: f32, max_w: f32
     drawTextZ(renderer, new_label, x, y, max_w, max_h, h_align, v_align);
 }
 pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, max_w: f32, max_h: f32, h_align: HAlignment, v_align: VAlignment) void {
+    if (label.len == 0) return;
     if (max_w > 0 and max_h > 0) {
         _ = c.SDL_RenderSetClipRect(renderer, &c.SDL_Rect{
             .x = @intFromFloat(x),
