@@ -314,16 +314,17 @@ pub const TaskList = struct {
         const earliest_limit = Date.earliest(best.earliest_due, interval.end);
 
         if (earliest_limit != null and earliest_limit.?.isBefore(best.getEnd())) {
-            best.time = earliest_limit.?.timeSince(interval.start);
             std.debug.assert(best.time.getSeconds() > 0);
-            did_cut = true;
+            best.time = earliest_limit.?.timeSince(interval.start);
+            std.debug.assert(best.time.getSeconds() >= 0);
+            did_cut = (best.time.getSeconds() > 0);
         }
         if (!best.getEnd().?.eql(best.getEnd().?.getDayStart()))
             std.debug.assert(best.scheduled_start.?.getDay() == best.getEnd().?.getDay());
         std.debug.assert(best.getEnd().?.isBeforeEq(interval.end));
 
         const ret_interval = Interval{ .start = best.getEnd().?, .end = interval.end, .free = interval.free };
-        const completed = best.getEnd().?.eql(interval.end);
+        const completed = (best.time.getSeconds() == 0) or best.getEnd().?.eql(interval.end);
         if (did_cut) {
             if (!completed) {
                 return .{ .task = best, .interval = ret_interval };
@@ -442,7 +443,7 @@ pub const TaskList = struct {
                     var cloned = ret;
                     // TODO: Set this when loading the tasks, not on iteration
                     cloned.earliest_due = Date.earliest(cloned.earliest_due, t.earliest_due);
-                    if (cloned.time.getSeconds() == 0) {
+                    if (Date.isBeforeEq(cloned.earliest_due, interval.start) or cloned.time.getSeconds() == 0) {
                         // We reached a task with zero seconds, so we just mark it as done
                         // and try again
                         const done_time = interval.end; // TODO: Improve this
