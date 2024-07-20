@@ -415,7 +415,8 @@ pub const TaskList = struct {
                 has_pending_children = true;
                 continue;
             }
-            return self.getFirstTask(t, at_time);
+            const first_task = self.getFirstTask(t, at_time);
+            if (first_task != null) return first_task;
         }
         if (has_pending_children) {
             return null;
