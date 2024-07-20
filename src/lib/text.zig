@@ -2,6 +2,7 @@ const std = @import("std");
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
     @cInclude("SDL2/SDL_ttf.h");
+    @cInclude("fontconfig/fontconfig.h");
 });
 
 const HAlignment = enum {
@@ -23,7 +24,7 @@ pub fn drawText(renderer: anytype, label: []const u8, x: f32, y: f32, max_w: f32
 pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, max_w: f32, max_h: f32, h_align: HAlignment, v_align: VAlignment) void {
     if (label.len == 0) return;
     if (max_w > 0 and max_h > 0) {
-        _ = c.SDL_RenderSetClipRect(renderer, &c.SDL_Rect{
+        _ = c.SDL_RenderSetClipRect(@ptrCast(renderer), &c.SDL_Rect{
             .x = @intFromFloat(x),
             .y = @intFromFloat(y),
             .w = @intFromFloat(max_w),
@@ -33,11 +34,14 @@ pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, max_w: 
     const size = 14;
 
     const font = c.TTF_OpenFont("data/Mecha.ttf", size);
+    //var fontpath: [256:0]u8 = undefined;
+    //loadFont("Roboto-Regular.ttf", &fontpath);
+    //const font = c.TTF_OpenFont(&fontpath, size);
     defer c.TTF_CloseFont(font);
     std.debug.assert(font != null);
 
     var color: c.SDL_Color = undefined;
-    _ = c.SDL_GetRenderDrawColor(renderer, &color.r, &color.g, &color.b, &color.a);
+    _ = c.SDL_GetRenderDrawColor(@ptrCast(renderer), &color.r, &color.g, &color.b, &color.a);
 
     const text_surface = if (max_w < 0)
         c.TTF_RenderUTF8_Blended(font, label, color)
@@ -67,5 +71,31 @@ pub fn drawTextZ(renderer: anytype, label: [:0]const u8, x: f32, y: f32, max_w: 
     const text_location: c.SDL_Rect = .{ .x = draw_x, .y = draw_y, .w = w, .h = h };
 
     _ = c.SDL_RenderCopy(@ptrCast(renderer), text_texture, null, &text_location);
-    _ = c.SDL_RenderSetClipRect(renderer, null);
+    _ = c.SDL_RenderSetClipRect(@ptrCast(renderer), null);
+}
+
+pub fn loadFont(name: [:0]const u8, buf: [:0]u8) void {
+    const config = c.FcInitLoadConfigAndFonts();
+
+    // configure the search pattern,
+    // assume "name" is a std::string with the desired font name in it
+    const pat = c.FcNameParse(name);
+    defer c.FcPatternDestroy(pat);
+    _ = c.FcConfigSubstitute(config, pat, c.FcMatchPattern);
+    c.FcDefaultSubstitute(pat);
+
+    // find the font
+    var res: c.FcResult = undefined;
+    const font_opt = c.FcFontMatch(config, pat, &res);
+    defer c.FcPatternDestroy(font_opt);
+    if (font_opt) |font| {
+        var file: [*c]c.FcChar8 = null;
+        if (c.FcPatternGetString(font, c.FC_FILE, 0, &file) == c.FcResultMatch) {
+            // save the file to another std::string
+            std.mem.copyForwards(u8, buf, std.mem.span(file));
+            buf[std.mem.len(file)] = 0;
+            return;
+        }
+    }
+    @panic("Couldn't find font");
 }

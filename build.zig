@@ -10,6 +10,7 @@ pub fn buildGUI(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
 
     exe.linkSystemLibrary("c");
     exe.linkSystemLibrary("rt");
+    exe.linkSystemLibrary("fontconfig");
     exe.linkSystemLibrary("SDL2");
     exe.linkSystemLibrary("SDL2_image");
     exe.linkSystemLibrary("SDL2_ttf");
@@ -49,6 +50,7 @@ pub fn buildCLI(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     exe.root_module.addImport("regex", regex_module);
     exe.root_module.addImport("linenoise", linenoise_module);
     exe.linkLibC();
+    exe.linkSystemLibrary("fontconfig");
     exe.linkSystemLibrary("pcre");
     exe.linkSystemLibrary("sqlite3");
     b.installArtifact(exe);
@@ -87,6 +89,7 @@ pub fn build(b: *std.Build) void {
 
     unit_tests.linkSystemLibrary("c");
     unit_tests.linkSystemLibrary("rt");
+    unit_tests.linkSystemLibrary("fontconfig");
     unit_tests.linkSystemLibrary("SDL2");
     unit_tests.linkSystemLibrary("SDL2_image");
     unit_tests.linkSystemLibrary("SDL2_ttf");

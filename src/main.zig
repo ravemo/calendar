@@ -222,47 +222,53 @@ pub fn main() !void {
                         try textbox_text.append(char);
                     }
                 },
-                c.SDL_KEYDOWN => if (!show_popup) switch (ev.key.keysym.scancode) {
-                    c.SDL_SCANCODE_Q => break :mainLoop,
-                    c.SDL_SCANCODE_COMMA, c.SDL_SCANCODE_PERIOD => |sc| {
-                        if (ev.key.keysym.mod & c.KMOD_SHIFT != 0) {
-                            // tmp = 0 if comma, 1 if period
-                            const tmp: i32 = @intCast(sc - c.SDL_SCANCODE_COMMA);
-                            const d_weeks = tmp * 2 - 1;
-                            weekview.start = weekview.start.after(.{ .weeks = d_weeks });
-                            update = true;
-                        }
-                    },
-                    c.SDL_SCANCODE_F5 => update = true,
-                    c.SDL_SCANCODE_Z => {
-                        update = true;
-                        resetZoomTo(&hours_surface, Date.now().getHourF());
-                        resetZoomTo(&weekview.sf, Date.now().getHourF());
-                    },
-                    c.SDL_SCANCODE_A => {},
-                    c.SDL_SCANCODE_D => if (selected_task) |t| {
-                        const now_string = try Date.now().toStringZ(alloc);
-                        defer alloc.free(now_string);
-                        if (t.repeat == null) {
-                            try tasks_db.prepare("UPDATE tasks SET status = ? WHERE uuid = ?;");
-                            try tasks_db.bindText(1, now_string);
-                            try tasks_db.bindInt(2, t.id);
-                            try tasks_db.executeAndFinish();
-                            update = true;
-                        } else {
-                            @panic("'Mark as done' not implemented for repeating tasks.");
-                        }
-
+                c.SDL_KEYDOWN => switch (ev.key.keysym.sym) {
+                    c.SDLK_ESCAPE => {
                         selected_task = null;
+                        selected_event = null;
                     },
-                    c.SDL_SCANCODE_DELETE => {
-                        if (selected_event) |se| {
+                    else => if (!show_popup) switch (ev.key.keysym.scancode) {
+                        c.SDL_SCANCODE_Q => break :mainLoop,
+                        c.SDL_SCANCODE_COMMA, c.SDL_SCANCODE_PERIOD => |sc| {
+                            if (ev.key.keysym.mod & c.KMOD_SHIFT != 0) {
+                                // tmp = 0 if comma, 1 if period
+                                const tmp: i32 = @intCast(sc - c.SDL_SCANCODE_COMMA);
+                                const d_weeks = tmp * 2 - 1;
+                                weekview.start = weekview.start.after(.{ .weeks = d_weeks });
+                                update = true;
+                            }
+                        },
+                        c.SDL_SCANCODE_F5 => update = true,
+                        c.SDL_SCANCODE_Z => {
                             update = true;
-                            try RmCmd.remove(&events_db, se.id);
-                            events.remove(se.id);
-                        }
+                            resetZoomTo(&hours_surface, Date.now().getHourF());
+                            resetZoomTo(&weekview.sf, Date.now().getHourF());
+                        },
+                        c.SDL_SCANCODE_A => {},
+                        c.SDL_SCANCODE_D => if (selected_task) |t| {
+                            const now_string = try Date.now().toStringZ(alloc);
+                            defer alloc.free(now_string);
+                            if (t.repeat == null) {
+                                try tasks_db.prepare("UPDATE tasks SET status = ? WHERE uuid = ?;");
+                                try tasks_db.bindText(1, now_string);
+                                try tasks_db.bindInt(2, t.id);
+                                try tasks_db.executeAndFinish();
+                                update = true;
+                            } else {
+                                @panic("'Mark as done' not implemented for repeating tasks.");
+                            }
+
+                            selected_task = null;
+                        },
+                        c.SDL_SCANCODE_DELETE => {
+                            if (selected_event) |se| {
+                                update = true;
+                                try RmCmd.remove(&events_db, se.id);
+                                events.remove(se.id);
+                            }
+                        },
+                        else => {},
                     },
-                    else => {},
                 },
                 c.SDL_KEYUP => if (!show_popup) switch (ev.key.keysym.scancode) {
                     c.SDL_SCANCODE_A => {
@@ -433,6 +439,20 @@ pub fn main() !void {
             display_tasks = try scheduler.scheduleTasks(&base_tasks, render_start.after(.{ .weeks = 1 }).getWeekStart());
             cursor = Date.now();
             c.SDL_SetCursor(normal_cursor);
+            if (selected_event) |se| {
+                for (events.events.items) |e| {
+                    if (e.id != se.id) continue;
+                    selected_event = null;
+                    break;
+                }
+            }
+            if (selected_task) |st| {
+                for (base_tasks.tasks.items) |t| {
+                    if (t.id != st.id) continue;
+                    selected_task = null;
+                    break;
+                }
+            }
             update = false;
         }
 
