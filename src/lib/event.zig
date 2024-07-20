@@ -149,6 +149,7 @@ pub const EventIterator = struct {
         self.events = self.original_events;
         self.time = start;
         self.i = 0;
+        if (self.events.items.len == 0) return;
         while (self.events.items[self.i].getEnd().isBeforeEq(start)) {
             self.finishEvent();
         }

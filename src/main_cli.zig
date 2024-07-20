@@ -4,7 +4,8 @@ const Database = @import("lib/database.zig").Database;
 const Linenoise = @import("linenoise").Linenoise;
 
 pub fn main() !void {
-    var db = try Database.init("calendar.db");
+    const allocator = std.heap.page_allocator;
+    var db = try Database.init(allocator, "calendar/calendar.db");
     defer db.deinit();
 
     try db.execute(
@@ -24,7 +25,6 @@ pub fn main() !void {
         \\);
     );
 
-    const allocator = std.heap.page_allocator;
     var ln = Linenoise.init(allocator);
     defer ln.deinit();
     while (try ln.linenoiseZ("> ")) |input| {

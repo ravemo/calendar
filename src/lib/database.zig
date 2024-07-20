@@ -12,10 +12,26 @@ pub const Database = struct {
     db: ?*c.sqlite3,
     res: ?*c.sqlite3_stmt = undefined,
 
-    pub fn init(path: [:0]const u8) !Self {
+    pub fn init(alloc: std.mem.Allocator, xdg_path: []const u8) !Self {
+        const str = try std.fs.getAppDataDir(alloc, xdg_path);
+        defer alloc.free(str);
+        const path = try alloc.dupeZ(u8, str);
+        defer alloc.free(path);
         var db: ?*c.sqlite3 = undefined;
         if (c.SQLITE_OK != c.sqlite3_open(path, &db)) {
             print("Can't open database: {s}\n", .{c.sqlite3_errmsg(db)});
+            std.debug.print("Creating file...\n", .{});
+            const dirname = std.fs.path.dirname(path) orelse return error.InvalidPath;
+            try std.fs.cwd().makeDir(dirname);
+            var dir = try std.fs.cwd().openDir(
+                dirname,
+                .{},
+            );
+            defer dir.close();
+
+            _ = try dir.createFile(std.fs.path.basename(path), .{});
+        }
+        if (c.SQLITE_OK != c.sqlite3_open(path, &db)) {
             return error.InvalidPath;
         }
         return .{ .db = db };

@@ -109,10 +109,25 @@ pub fn main() !void {
 
     wakeEvent = c.SDL_RegisterEvents(1);
 
-    var events_db = try Database.init("calendar.db");
+    var events_db = try Database.init(alloc, "calendar/calendar.db");
     defer events_db.deinit();
-    // TODO: Use proper user_data_dir-like function when releasing to the public
-    var tasks_db = try Database.init("/home/victor/.local/share/scrytask/tasks.db");
+    try events_db.execute(
+        \\CREATE TABLE IF NOT EXISTS Repeats (
+        \\    Id INTEGER PRIMARY KEY,
+        \\    Period TEXT NOT NULL,
+        \\    Start TEXT,
+        \\    End TEXT
+        \\);
+        \\CREATE TABLE IF NOT EXISTS Events (
+        \\    Id INTEGER PRIMARY KEY,
+        \\    Name TEXT NOT NULL,
+        \\    Start TEXT NOT NULL,
+        \\    End TEXT NOT NULL,
+        \\    Repeat INTEGER,
+        \\    FOREIGN KEY(Repeat) REFERENCES Repeats(Id)
+        \\);
+    );
+    var tasks_db = try Database.init(alloc, "scrytask/tasks.db");
     defer tasks_db.deinit();
     var events = try EventList.init(alloc, events_db);
     defer events.deinit();
