@@ -3,15 +3,15 @@ const event_lib = @import("event.zig");
 const Event = event_lib.Event;
 const calendar = @import("datetime.zig");
 const Date = calendar.Date;
+const TextRenderer = @import("text.zig").TextRenderer;
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
     @cInclude("SDL2/SDL_ttf.h");
 });
-pub const Renderer = ?*c.SDL_Renderer;
 
 pub const Surface = struct {
     const Self = @This();
-    renderer: Renderer,
+    text_renderer: TextRenderer,
     tex: ?*c.SDL_Texture,
     x: f32,
     y: f32,
@@ -22,11 +22,11 @@ pub const Surface = struct {
     sy: f32,
     zoom: f32,
 
-    pub fn init(renderer: Renderer, x: f32, y: f32, w: f32, h: f32) Self {
+    pub fn init(text_renderer: TextRenderer, x: f32, y: f32, w: f32, h: f32) Self {
         return .{
-            .renderer = renderer,
+            .text_renderer = text_renderer,
             .tex = c.SDL_CreateTexture(
-                renderer,
+                @ptrCast(text_renderer.renderer),
                 c.SDL_PIXELFORMAT_RGBA8888,
                 c.SDL_TEXTUREACCESS_TARGET,
                 @intFromFloat(w),
@@ -72,7 +72,12 @@ pub const Surface = struct {
     }
 
     pub fn draw(self: Self) void {
-        _ = c.SDL_RenderCopy(self.renderer, self.tex, null, &self.getRect());
+        _ = c.SDL_RenderCopy(
+            @ptrCast(self.text_renderer.renderer),
+            self.tex,
+            null,
+            &self.getRect(),
+        );
     }
 
     pub fn xFromDate(self: Self, date: Date) ?f32 {

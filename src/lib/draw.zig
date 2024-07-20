@@ -9,6 +9,7 @@ const Event = event_lib.Event;
 const EventIterator = event_lib.EventIterator;
 const Surface = @import("surface.zig").Surface;
 const WeekView = @import("weekview.zig").WeekView;
+const TextRenderer = @import("text.zig").TextRenderer;
 const Task = @import("task.zig").Task;
 
 const text = @import("text.zig");
@@ -47,16 +48,17 @@ const task_colors: [@typeInfo(TaskColor).Enum.fields.len]arc.Color = .{
 const tooltip_bg_color = arc.colorFromHex(0xd8d888aa);
 
 pub fn drawGrid(sf: Surface) void {
-    const renderer = sf.renderer;
+    const renderer = sf.text_renderer.renderer;
     arc.setColor(renderer, grid_color);
     for (0..48) |i| {
         const y: f32 = sf.yFromHour(@as(f32, @floatFromInt(i)) / 2);
-        _ = c.SDL_RenderDrawLineF(renderer, 0, y, sf.w, y);
+        _ = c.SDL_RenderDrawLineF(@ptrCast(renderer), 0, y, sf.w, y);
     }
 }
 
 pub fn drawEvent(wv: *WeekView, event: Event, selected: bool) !void {
-    const renderer = wv.sf.renderer;
+    const text_renderer = wv.sf.text_renderer;
+    const renderer = @as(*c.SDL_Renderer, @ptrCast(text_renderer.renderer));
     // if the event crosses the day boundary, but does not end at midnight
     if (event.start.getDayStart().isBefore(event.getEnd().getDayStart()) and
         !event.getEnd().getDayStart().eql(event.getEnd()))
@@ -107,7 +109,7 @@ pub fn drawEvent(wv: *WeekView, event: Event, selected: bool) !void {
     try wv.eventRects.append(.{ .id = draw_event.id, .rect = rect });
 
     arc.setColor(renderer, text_color);
-    text.drawText(renderer, draw_event.name, x + 2, y + 2, rect.w - 4, rect.h - 4, .Left, .Top);
+    text.drawText(text_renderer, draw_event.name, x + 2, y + 2, rect.w - 4, rect.h - 4, .Left, .Top);
 }
 
 pub fn drawTask(wv: *WeekView, task: Task, now: Date, selected: bool) !void {
@@ -120,7 +122,8 @@ pub fn drawTask(wv: *WeekView, task: Task, now: Date, selected: bool) !void {
     if (!task.getEnd().?.eql(task.getEnd().?.getDayStart()))
         std.debug.assert(task.scheduled_start.?.getDay() == task.getEnd().?.getDay());
 
-    const renderer = wv.sf.renderer;
+    const text_renderer = wv.sf.text_renderer;
+    const renderer = @as(*c.SDL_Renderer, @ptrCast(text_renderer.renderer));
 
     if (task.scheduled_start == null) return;
 
@@ -177,11 +180,12 @@ pub fn drawTask(wv: *WeekView, task: Task, now: Date, selected: bool) !void {
 
     arc.setColor(renderer, text_color);
     if (rect.h > 20)
-        text.drawText(renderer, draw_task.name, x + 2, y + 2, rect.w - 4, rect.h - 4, .Left, .Top);
+        text.drawText(text_renderer, draw_task.name, x + 2, y + 2, rect.w - 4, rect.h - 4, .Left, .Top);
 }
 
 pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Date, cursor: Date, selected_task: ?*Task, selected_event: ?*Event) !void {
-    const renderer = wv.sf.renderer;
+    const text_renderer = wv.sf.text_renderer;
+    const renderer = @as(*c.SDL_Renderer, @ptrCast(text_renderer.renderer));
     _ = c.SDL_SetRenderTarget(renderer, wv.sf.tex);
     arc.setColor(renderer, background_color);
     _ = c.SDL_RenderClear(renderer);
@@ -214,7 +218,8 @@ pub fn drawWeek(wv: *WeekView, events_it: *EventIterator, tasks: []Task, now: Da
 pub fn drawHours(sf: Surface, now: Date) void {
     _ = now;
 
-    const renderer = sf.renderer;
+    const text_renderer = sf.text_renderer;
+    const renderer = @as(*c.SDL_Renderer, @ptrCast(text_renderer.renderer));
     _ = c.SDL_SetRenderTarget(renderer, sf.tex);
     _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
     _ = c.SDL_RenderClear(renderer);
@@ -228,7 +233,7 @@ pub fn drawHours(sf: Surface, now: Date) void {
         const y: f32 = sep * @as(f32, @floatFromInt(i)) + sf.sy;
         var buf: [6:0]u8 = undefined;
         buf = std.mem.bytesToValue([6:0]u8, std.fmt.bufPrintZ(&buf, "{}:00", .{i}) catch "error");
-        text.drawText(renderer, &buf, sf.w - 20, y, -1, -1, .Right, .Center);
+        text.drawText(text_renderer, &buf, sf.w - 20, y, -1, -1, .Right, .Center);
     }
 
     arc.setColor(renderer, divider_color);
@@ -240,7 +245,8 @@ pub fn drawHours(sf: Surface, now: Date) void {
 }
 
 pub fn drawDays(sf: Surface, now: Date) void {
-    const renderer = sf.renderer;
+    const text_renderer = sf.text_renderer;
+    const renderer = @as(*c.SDL_Renderer, @ptrCast(text_renderer.renderer));
     const weekdays = [_][:0]const u8{ "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday" };
     _ = c.SDL_SetRenderTarget(renderer, sf.tex);
     _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
@@ -252,8 +258,8 @@ pub fn drawDays(sf: Surface, now: Date) void {
         const x: f32 = sf.w * @as(f32, @floatFromInt(i)) / 7;
         var buf: [2:0]u8 = [_:0]u8{ 0, 0 };
         _ = std.fmt.formatIntBuf(&buf, cur_day.getDay(), 10, .lower, .{});
-        text.drawText(renderer, weekday, x + sf.w / 14, sf.h / 3, -1, -1, .Center, .Center);
-        text.drawText(renderer, &buf, x + sf.w / 14, 2 * sf.h / 3, -1, -1, .Center, .Center);
+        text.drawText(text_renderer, weekday, x + sf.w / 14, sf.h / 3, -1, -1, .Center, .Center);
+        text.drawText(text_renderer, &buf, x + sf.w / 14, 2 * sf.h / 3, -1, -1, .Center, .Center);
     }
     arc.setColor(renderer, divider_color);
     for (0..7) |i| {
@@ -271,7 +277,8 @@ pub const Tooltip = struct {
     x: i32,
     y: i32,
 
-    pub fn draw(self: Self, renderer: Renderer) !void {
+    pub fn draw(self: Self, text_renderer: TextRenderer) !void {
+        const renderer = @as(*c.SDL_Renderer, @ptrCast(text_renderer.renderer));
         arc.setColor(renderer, tooltip_bg_color);
         const rect = c.SDL_Rect{
             .x = self.x,
@@ -283,7 +290,7 @@ pub const Tooltip = struct {
 
         arc.setColor(renderer, text_color);
         text.drawText(
-            renderer,
+            text_renderer,
             self.text,
             @as(f32, @floatFromInt(self.x)) + 5,
             @as(f32, @floatFromInt(self.y)) - 100 + 5,

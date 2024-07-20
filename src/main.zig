@@ -54,7 +54,7 @@ fn getDeltaDate(sf: Surface, x0: f32, y0: f32, x1: f32, y1: f32) struct { day: i
 }
 
 test "delta time" {
-    const sf = Surface.init(null, 0, 0, 60, 40);
+    const sf = Surface.init(undefined, 0, 0, 60, 40);
     const d = getDeltaDate(sf, 15, 20, 15, 20);
     try std.testing.expectEqual(0, d.day);
     try std.testing.expectEqual(0, d.hour);
@@ -85,9 +85,9 @@ pub fn main() !void {
         sdlPanic();
 
     defer c.SDL_Quit();
-    if (c.TTF_Init() < 0)
-        sdlPanic();
-    defer c.TTF_Quit();
+
+    var text_renderer = text.TextRenderer.init("Roboto-Regular.ttf");
+    defer text_renderer.deinit();
 
     const window = c.SDL_CreateWindow(
         "Calendar",
@@ -101,6 +101,7 @@ pub fn main() !void {
 
     const renderer = c.SDL_CreateRenderer(window, -1, c.SDL_RENDERER_ACCELERATED | c.SDL_RENDERER_PRESENTVSYNC) orelse sdlPanic();
     defer _ = c.SDL_DestroyRenderer(renderer);
+    text_renderer.renderer = @ptrCast(renderer);
     _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_BLEND);
     const normal_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_ARROW);
     const wait_cursor = c.SDL_CreateSystemCursor(c.SDL_SYSTEM_CURSOR_WAIT);
@@ -140,9 +141,9 @@ pub fn main() !void {
     var display_tasks = try scheduler.scheduleTasks(&base_tasks, Date.now().after(.{ .weeks = 1 }).getWeekStart());
     defer display_tasks.deinit();
 
-    var hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
-    var days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
-    var weekview = WeekView.init(alloc, renderer, scrn_w, scrn_h);
+    var hours_surface = Surface.init(text_renderer, 0, 96, 64, scrn_h - 96);
+    var days_surface = Surface.init(text_renderer, 64, 0, scrn_w - 64, 96);
+    var weekview = WeekView.init(alloc, text_renderer, scrn_w, scrn_h);
     defer hours_surface.deinit();
     defer days_surface.deinit();
     defer weekview.deinit();
@@ -411,9 +412,9 @@ pub fn main() !void {
                             hours_surface.deinit();
                             days_surface.deinit();
                             weekview.deinit();
-                            hours_surface = Surface.init(renderer, 0, 96, 64, scrn_h - 96);
-                            days_surface = Surface.init(renderer, 64, 0, scrn_w - 64, 96);
-                            weekview = WeekView.init(alloc, renderer, scrn_w, scrn_h);
+                            hours_surface = Surface.init(text_renderer, 0, 96, 64, scrn_h - 96);
+                            days_surface = Surface.init(text_renderer, 64, 0, scrn_w - 64, 96);
+                            weekview = WeekView.init(alloc, text_renderer, scrn_w, scrn_h);
                             resetZoom(&hours_surface);
                             resetZoom(&weekview.sf);
                         },
@@ -470,7 +471,7 @@ pub fn main() !void {
         days_surface.draw();
         hours_surface.draw();
 
-        if (tooltip) |tt| try tt.draw(renderer);
+        if (tooltip) |tt| try tt.draw(text_renderer);
 
         if (show_popup) {
             _ = c.SDL_SetRenderDrawColor(renderer, 0xEE, 0xEE, 0xEE, 0xFF);
@@ -480,7 +481,7 @@ pub fn main() !void {
             _ = c.SDL_RenderFillRect(renderer, &popup_textbox_rect);
             arc.setColor(renderer, arc.colorFromHex(0x000000FF));
             text.drawText(
-                renderer,
+                text_renderer,
                 textbox_text.items,
                 @floatFromInt(popup_textbox_rect.x),
                 @floatFromInt(popup_textbox_rect.y),

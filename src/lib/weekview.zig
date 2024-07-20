@@ -1,12 +1,12 @@
 const std = @import("std");
 const Surface = @import("surface.zig").Surface;
 const Date = @import("datetime.zig").Date;
+const TextRenderer = @import("text.zig").TextRenderer;
 
 const c = @cImport({
     @cInclude("SDL2/SDL.h");
     @cInclude("SDL2/SDL_ttf.h");
 });
-pub const Renderer = ?*c.SDL_Renderer;
 pub const IdRect = struct {
     id: i32,
     rect: c.SDL_FRect,
@@ -22,7 +22,7 @@ pub const WeekView = struct {
     eventRects: std.ArrayList(IdRect),
     taskRects: std.ArrayList(IdRect),
     start: Date,
-    pub fn init(allocator: std.mem.Allocator, renderer: Renderer, scrn_w: f32, scrn_h: f32) Self {
+    pub fn init(allocator: std.mem.Allocator, renderer: TextRenderer, scrn_w: f32, scrn_h: f32) Self {
         return .{
             .sf = Surface.init(renderer, 64, 96, scrn_w - 64, scrn_h - 96),
             .eventRects = std.ArrayList(IdRect).init(allocator),
