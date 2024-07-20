@@ -465,7 +465,7 @@ pub fn main() !void {
         draw.drawHours(hours_surface, Date.now());
         draw.drawDays(days_surface, weekview.start);
 
-        _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xEE, 0xFF, 0xFF);
+        _ = c.SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
         _ = c.SDL_RenderClear(renderer);
         weekview.sf.draw();
         days_surface.draw();

@@ -88,8 +88,8 @@ pub fn drawEvent(wv: *WeekView, event: Event, selected: bool) !void {
     if (wv.getEnd().isBefore(draw_event.getEnd()))
         draw_event.duration = wv.getEnd().timeSince(draw_event.start);
 
-    const z = 1 / wv.sf.getScale();
-    const h = z * draw_event.duration.getHoursF();
+    const h = draw_event.duration.getHoursF();
+    const draw_h = wv.sf.yFromHour(h) - wv.sf.yFromHour(0);
 
     const x = wv.sf.xFromDate(draw_event.start).? + 3;
     const y = wv.sf.yFromHour(draw_event.start.getHourF());
@@ -100,9 +100,9 @@ pub fn drawEvent(wv: *WeekView, event: Event, selected: bool) !void {
     }
     const rect = c.SDL_FRect{
         .x = x,
-        .y = y,
+        .y = y + 1,
         .w = wv.sf.w / 7 - 5,
-        .h = h * wv.sf.h / 24,
+        .h = draw_h - 1,
     };
     _ = c.SDL_RenderFillRectF(renderer, &rect);
 
@@ -142,8 +142,8 @@ pub fn drawTask(wv: *WeekView, task: Task, now: Date, selected: bool) !void {
         draw_task.time = wv.getEnd().timeSince(draw_start.*);
     // TODO: Check if task is visible inside week view
 
-    const z = 1 / wv.sf.getScale();
-    const h = z * draw_task.time.getHoursF();
+    const h = draw_task.time.getHoursF();
+    const draw_h = wv.sf.yFromHour(h) - wv.sf.yFromHour(0);
 
     const x = wv.sf.xFromWeekday(draw_start.getWeekday()) + 3;
     const y = wv.sf.yFromHour(draw_start.getHourF());
@@ -158,7 +158,7 @@ pub fn drawTask(wv: *WeekView, task: Task, now: Date, selected: bool) !void {
         .x = x,
         .y = y + 1,
         .w = wv.sf.w / 7 - 5,
-        .h = h * wv.sf.h / 24 - 1,
+        .h = draw_h - 1,
     };
     if (selected) {
         arc.setColor(renderer, arc.invertColor(task_color));
